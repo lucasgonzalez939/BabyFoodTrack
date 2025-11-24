@@ -3,8 +3,9 @@ class FeedingTracker {
     constructor() {
         this.feedings = [];
         this.diapers = [];
-        this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        this.nextFeedingTimer = null;
+    this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    this.nextFeedingTimer = null;
+    this.nextFeedingCountdownInterval = null;
         this.currentFeedingType = 'bottle'; // 'bottle' or 'breast'
         this.darkMode = false;
         this.defaultInterval = 3.5; // Default hours between feedings
@@ -144,6 +145,7 @@ class FeedingTracker {
                     this.updateStats('today');
                     this.updateGraphs('today');
                     alert('Todos los datos han sido eliminados.');
+                    this.clearNextFeedingSchedule();
                 }
             }
         });
@@ -267,7 +269,7 @@ class FeedingTracker {
         document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
         document.querySelectorAll('.duration-btn').forEach(b => b.classList.remove('selected'));
         
-        this.scheduleNextFeeding(interval);
+    this.scheduleNextFeeding(interval, new Date(timeInput));
         this.updateStats('today');
         this.updateGraphs('today');
         
@@ -287,6 +289,7 @@ class FeedingTracker {
             this.renderFeedingList();
             this.updateStats('today');
             this.updateGraphs('today');
+            this.recalculateNextFeedingFromHistory();
         }
     }
 
@@ -307,12 +310,23 @@ class FeedingTracker {
                 ? `${feeding.amount} ml` 
                 : `${feeding.duration} min (pecho)`;
             const icon = feeding.type === 'bottle' ? '🍼' : '🤱';
+            const nextFeedingDate = this.getNextFeedingDate(feeding);
+            const nextFeedingLabel = nextFeedingDate
+                ? this.formatDateTime(nextFeedingDate.toISOString())
+                : 'Sin intervalo';
+            const relativeLabel = nextFeedingDate
+                ? this.formatRelativeLabel(nextFeedingDate)
+                : '';
             
             return `
                 <div class="feeding-item">
                     <div class="feeding-info">
                         <div class="feeding-time">${icon} ${this.formatDateTime(feeding.timestamp)}</div>
-                        <div class="feeding-amount">${details} • Próxima en ${feeding.nextFeedingInterval}h</div>
+                        <div class="feeding-amount">${details}</div>
+                        <div class="feeding-next">
+                            Próxima aprox: <strong>${nextFeedingLabel}</strong>
+                            ${relativeLabel ? `<span class="feeding-next-relative">(${relativeLabel})</span>` : ''}
+                        </div>
                     </div>
                     <div class="feeding-actions">
                         <button class="btn btn-danger" onclick="tracker.deleteFeeding(${feeding.id})">Eliminar</button>
@@ -467,26 +481,95 @@ class FeedingTracker {
         }
     }
 
-    scheduleNextFeeding(intervalHours) {
+    getNextFeedingDate(feeding) {
+        if (!feeding || !feeding.timestamp) return null;
+        const base = new Date(feeding.timestamp);
+        const hours = parseFloat(feeding.nextFeedingInterval ?? this.defaultInterval);
+        if (!Number.isFinite(hours) || hours <= 0) return null;
+        return new Date(base.getTime() + hours * 60 * 60 * 1000);
+    }
+
+    formatCountdown(ms) {
+        const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+        const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+        const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    }
+
+    formatRelativeLabel(targetDate) {
+        if (!targetDate) return '';
+        const target = targetDate instanceof Date ? targetDate : new Date(targetDate);
+        if (Number.isNaN(target.getTime())) return '';
+        const diffMs = target - new Date();
+        const duration = this.formatDuration(Math.abs(diffMs));
+        if (Math.abs(diffMs) < 60000) {
+            return diffMs >= 0 ? 'menos de 1 min' : 'hace menos de 1 min';
+        }
+        return diffMs >= 0 ? `en ${duration}` : `hace ${duration}`;
+    }
+
+    clearCountdownInterval() {
+        if (this.nextFeedingCountdownInterval) {
+            clearInterval(this.nextFeedingCountdownInterval);
+            this.nextFeedingCountdownInterval = null;
+        }
+    }
+
+    clearNextFeedingSchedule() {
+        if (this.nextFeedingTimer) {
+            clearTimeout(this.nextFeedingTimer);
+            this.nextFeedingTimer = null;
+        }
+        this.clearCountdownInterval();
+        localStorage.removeItem('nextFeedingTime');
+        this.updateNextFeedingDisplay(null);
+    }
+
+    recalculateNextFeedingFromHistory() {
+        if (this.feedings.length === 0) {
+            this.clearNextFeedingSchedule();
+            return;
+        }
+        const latestFeeding = this.feedings[0];
+        const interval = latestFeeding.nextFeedingInterval || this.defaultInterval;
+        this.scheduleNextFeeding(interval, new Date(latestFeeding.timestamp));
+    }
+
+    scheduleNextFeeding(intervalHours, baseTime = new Date()) {
+        if (!Number.isFinite(intervalHours) || intervalHours <= 0) {
+            this.clearNextFeedingSchedule();
+            return;
+        }
         if (this.nextFeedingTimer) {
             clearTimeout(this.nextFeedingTimer);
         }
 
-        const nextFeedingTime = new Date(Date.now() + intervalHours * 60 * 60 * 1000);
+        let baseDate = baseTime instanceof Date ? baseTime : new Date(baseTime);
+        if (Number.isNaN(baseDate.getTime())) {
+            baseDate = new Date();
+        }
+        const nextFeedingTime = new Date(baseDate.getTime() + intervalHours * 60 * 60 * 1000);
         
         this.updateNextFeedingDisplay(nextFeedingTime);
 
-        const timeUntilFeeding = intervalHours * 60 * 60 * 1000;
-        
-        this.nextFeedingTimer = setTimeout(() => {
-            this.notifyFeeding();
-        }, timeUntilFeeding);
+        const timeUntilFeeding = nextFeedingTime.getTime() - Date.now();
 
-        // Save next feeding time
-        localStorage.setItem('nextFeedingTime', nextFeedingTime.toISOString());
+        if (timeUntilFeeding > 0) {
+            this.nextFeedingTimer = setTimeout(() => {
+                this.notifyFeeding();
+            }, timeUntilFeeding);
+            localStorage.setItem('nextFeedingTime', nextFeedingTime.toISOString());
+        } else {
+            localStorage.removeItem('nextFeedingTime');
+        }
     }
 
     checkNextFeeding() {
+        if (this.nextFeedingTimer) {
+            clearTimeout(this.nextFeedingTimer);
+            this.nextFeedingTimer = null;
+        }
         const nextFeedingTimeStr = localStorage.getItem('nextFeedingTime');
         if (nextFeedingTimeStr) {
             const nextFeedingTime = new Date(nextFeedingTimeStr);
@@ -499,14 +582,25 @@ class FeedingTracker {
                 this.nextFeedingTimer = setTimeout(() => {
                     this.notifyFeeding();
                 }, timeUntilFeeding);
-            } else {
-                this.updateNextFeedingDisplay(null);
+                return;
             }
+            localStorage.removeItem('nextFeedingTime');
+            this.updateNextFeedingDisplay(now);
+            return;
+        }
+        
+        if (this.feedings.length > 0) {
+            this.recalculateNextFeedingFromHistory();
+        } else {
+            this.updateNextFeedingDisplay(null);
         }
     }
 
     updateNextFeedingDisplay(nextFeedingTime) {
         const infoDiv = document.getElementById('next-feeding-info');
+        if (!infoDiv) return;
+
+        this.clearCountdownInterval();
         
         if (!nextFeedingTime) {
             infoDiv.innerHTML = '<p>No hay tomas programadas</p>';
@@ -514,21 +608,49 @@ class FeedingTracker {
             return;
         }
 
-        const timeStr = this.formatDateTime(nextFeedingTime.toISOString());
-        const now = new Date();
-        const diffMs = nextFeedingTime - now;
-        const diffMins = Math.round(diffMs / 60000);
+        const target = nextFeedingTime instanceof Date ? nextFeedingTime : new Date(nextFeedingTime);
         
-        if (diffMins <= 30) {
-            infoDiv.className = 'alert-info alert-warning';
-        } else {
-            infoDiv.className = 'alert-info';
+        const updateContent = () => {
+            const now = new Date();
+            const diffMs = target - now;
+            const diffMins = Math.round(diffMs / 60000);
+
+            if (diffMs <= 0) {
+                infoDiv.className = 'alert-info alert-warning';
+                infoDiv.innerHTML = `
+                    <p><strong>¡Es hora de la siguiente toma!</strong></p>
+                    <div class="countdown-timer overdue">00:00:00</div>
+                `;
+                return false;
+            }
+
+            if (diffMins <= 30) {
+                infoDiv.className = 'alert-info alert-warning';
+            } else {
+                infoDiv.className = 'alert-info';
+            }
+
+            infoDiv.innerHTML = `
+                <p><strong>Próxima toma:</strong> ${this.formatDateTime(target.toISOString())}</p>
+                <div class="countdown-timer">${this.formatCountdown(diffMs)}</div>
+                <p class="countdown-subtext">Faltan ${this.formatDuration(diffMs)}</p>
+            `;
+            return true;
+        };
+
+        if (updateContent()) {
+            this.nextFeedingCountdownInterval = setInterval(() => {
+                if (!updateContent()) {
+                    this.clearCountdownInterval();
+                }
+            }, 1000);
         }
-        
-        infoDiv.innerHTML = `<p><strong>Próxima toma:</strong> ${timeStr} (en ${this.formatDuration(diffMs)})</p>`;
     }
 
     formatDuration(ms) {
+        if (!Number.isFinite(ms)) {
+            return '0m';
+        }
         const hours = Math.floor(ms / 3600000);
         const minutes = Math.floor((ms % 3600000) / 60000);
         
@@ -553,7 +675,8 @@ class FeedingTracker {
         this.playAlert();
 
         // Update display
-        this.updateNextFeedingDisplay(null);
+        localStorage.removeItem('nextFeedingTime');
+        this.updateNextFeedingDisplay(new Date());
     }
 
     playAlert() {
