@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Control de Alimentación del Bebé</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Tab Navigation with Icon -->
+        <nav class="tabs">
+            <div class="app-icon">🍼</div>
+            <button class="tab-button active" data-tab="tracker">Registro</button>
+            <button class="tab-button" data-tab="diapers">Pañales</button>
+            <button class="tab-button" data-tab="statistics">Estadísticas</button>
+            <button class="tab-button" data-tab="settings">Ajustes</button>
+        </nav>
+
+        <!-- Tracker Tab -->
+        <div id="tracker" class="tab-content active">
+            <section class="add-feeding">
+                <h2>Registrar Alimentación</h2>
+                <form id="feeding-form">
+                    <div class="form-group">
+                        <label for="feeding-type">Tipo de alimentación:</label>
+                        <div class="type-selector">
+                            <button type="button" class="type-btn active" data-type="bottle">🍼 Biberón</button>
+                            <button type="button" class="type-btn" data-type="breast">🤱 Pecho</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="feeding-time">Fecha y hora:</label>
+                        <input type="datetime-local" id="feeding-time" required>
+                    </div>
+                    
+                    <div class="form-group" id="amount-group">
+                        <label for="milk-amount">Cantidad (ml):</label>
+                        <div class="quick-amounts">
+                            <button type="button" class="amount-btn" data-amount="60">60ml</button>
+                            <button type="button" class="amount-btn" data-amount="90">90ml</button>
+                            <button type="button" class="amount-btn" data-amount="120">120ml</button>
+                            <button type="button" class="amount-btn" data-amount="150">150ml</button>
+                        </div>
+                        <input type="number" id="milk-amount" min="0" step="1" placeholder="O ingresa cantidad">
+                    </div>
+
+                    <div class="form-group hidden" id="duration-group">
+                        <label for="feeding-duration">Duración (minutos):</label>
+                        <div class="quick-durations">
+                            <button type="button" class="duration-btn" data-duration="10">10 min</button>
+                            <button type="button" class="duration-btn" data-duration="15">15 min</button>
+                            <button type="button" class="duration-btn" data-duration="20">20 min</button>
+                            <button type="button" class="duration-btn" data-duration="30">30 min</button>
+                        </div>
+                        <input type="number" id="feeding-duration" min="1" step="1" placeholder="O ingresa duración">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Agregar Registro</button>
+                </form>
+            </section>
+
+            <section class="next-feeding-alert">
+                <div id="next-feeding-info" class="alert-info">
+                    <p>No hay tomas programadas</p>
+                </div>
+            </section>
+
+            <section class="feeding-history">
+                <div class="section-header">
+                    <h2>Historial</h2>
+                </div>
+                <div id="feeding-list" class="feeding-list">
+                    <!-- Feeding records will be displayed here -->
+                </div>
+            </section>
+        </div>
+
+        <!-- Diapers Tab -->
+        <div id="diapers" class="tab-content">
+            <section class="add-diaper">
+                <h2>Cambio de Pañal</h2>
+                <form id="diaper-form">
+                    <div class="form-group">
+                        <label for="diaper-time">Fecha y hora:</label>
+                        <input type="datetime-local" id="diaper-time" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Tipo de cambio:</label>
+                        <div class="diaper-type-selector">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="has-pee" checked>
+                                <span class="checkbox-custom">💧 Pipí</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="has-poop">
+                                <span class="checkbox-custom">💩 Popó</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="diaper-level">Nivel de llenado:</label>
+                        <div class="level-selector">
+                            <button type="button" class="level-btn" data-level="1">Bajo</button>
+                            <button type="button" class="level-btn active" data-level="2">Medio</button>
+                            <button type="button" class="level-btn" data-level="3">Alto</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="diaper-notes">Notas (opcional):</label>
+                        <textarea id="diaper-notes" rows="3" placeholder="Ej: Color, consistencia, etc."></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Registrar Cambio</button>
+                </form>
+            </section>
+
+            <section class="diaper-stats-quick">
+                <h3>Resumen de Hoy</h3>
+                <div id="diaper-today-summary" class="quick-stats">
+                    <!-- Quick stats will be displayed here -->
+                </div>
+            </section>
+
+            <section class="diaper-history">
+                <div class="section-header">
+                    <h2>Historial de Pañales</h2>
+                </div>
+                <div id="diaper-list" class="diaper-list">
+                    <!-- Diaper records will be displayed here -->
+                </div>
+            </section>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div id="statistics" class="tab-content">
+            <section class="stats-section">
+                <h2>Estadísticas y Gráficos</h2>
+                
+                <div class="stats-filter">
+                    <button class="filter-btn active" data-period="today">Hoy</button>
+                    <button class="filter-btn" data-period="week">Esta Semana</button>
+                </div>
+
+                <h3>Resumen</h3>
+                <div id="stats-display" class="stats-grid">
+                    <!-- Statistics will be displayed here -->
+                </div>
+
+                <h3>Horarios de Alimentación</h3>
+                <div class="graph-container">
+                    <canvas id="times-chart"></canvas>
+                </div>
+
+                <h3>Cantidad por Toma (ml)</h3>
+                <div class="graph-container">
+                    <canvas id="amounts-chart"></canvas>
+                </div>
+            </section>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <section class="settings-section">
+                <h2>Configuración</h2>
+                
+                <div class="setting-item">
+                    <div class="setting-header">
+                        <label for="dark-mode-toggle">Modo Oscuro</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="dark-mode-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="setting-description">Activa el tema oscuro para reducir el brillo de la pantalla</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="next-feeding-interval">Intervalo Predeterminado (horas)</label>
+                    <input type="number" id="next-feeding-interval" class="setting-input" min="1" max="12" step="0.5" value="3.5">
+                    <p class="setting-description">Tiempo predeterminado hasta la próxima toma</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="timezone">Zona Horaria</label>
+                    <select id="timezone" class="setting-select">
+                        <!-- Will be populated by JavaScript -->
+                    </select>
+                    <p class="setting-description">Configura tu zona horaria para registros precisos</p>
+                </div>
+
+                <div class="setting-item">
+                    <label>Importar / Exportar Datos</label>
+                    <div class="setting-actions">
+                        <button id="export-csv" class="btn btn-secondary">Exportar CSV</button>
+                        <label for="import-csv" class="btn btn-secondary">
+                            Importar CSV
+                            <input type="file" id="import-csv" accept=".csv" style="display: none;">
+                        </label>
+                    </div>
+                    <p class="setting-description">Exporta o importa tus registros de alimentación en formato CSV</p>
+                </div>
+
+                <div class="setting-item">
+                    <label>Datos</label>
+                    <div class="setting-actions">
+                        <button id="clear-all-data" class="btn btn-danger">Borrar Todos los Datos</button>
+                    </div>
+                    <p class="setting-description">Elimina permanentemente todos los registros de alimentación</p>
+                </div>
+
+                <div class="setting-item">
+                    <label>Versión</label>
+                    <p class="setting-description">Control de Alimentación v1.2</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
