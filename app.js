@@ -1,32 +1,55 @@
-// Baby Feeding Tracker Application - Spanish Version
+// Baby Feeding Tracker Application - Spanish Version with IndexedDB
 class FeedingTracker {
     constructor() {
         this.feedings = [];
         this.diapers = [];
-    this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    this.nextFeedingTimer = null;
-    this.nextFeedingCountdownInterval = null;
+        this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        this.nextFeedingTimer = null;
+        this.nextFeedingCountdownInterval = null;
         this.currentFeedingType = 'bottle'; // 'bottle' or 'breast'
         this.darkMode = false;
         this.defaultInterval = 3.5; // Default hours between feedings
         this.currentDiaperLevel = 2; // Default level: medium
-        this.init();
+        this.useIndexedDB = false; // Will be set after migration check
+        this.storageType = 'initializing';
     }
 
-    init() {
-        this.loadFromLocalStorage();
+    async init() {
+        try {
+            // Try to initialize IndexedDB and run migration
+            await db.init();
+            const migrationResult = await migration.migrate();
+            
+            this.useIndexedDB = true;
+            this.storageType = 'indexeddb';
+            console.log('✅ Using IndexedDB storage');
+            
+            if (migrationResult.status === 'success') {
+                console.log(`📦 Migrated ${migrationResult.feedings} feedings and ${migrationResult.diapers} diapers`);
+            }
+            
+            await this.loadFromStorage();
+        } catch (error) {
+            // Fallback to localStorage if IndexedDB fails
+            console.warn('⚠️ IndexedDB not available, falling back to localStorage:', error);
+            this.useIndexedDB = false;
+            this.storageType = 'localstorage';
+            this.loadFromLocalStorage();
+        }
+
         this.setupEventListeners();
         this.populateTimezones();
         this.setDefaultDateTime();
         this.setDefaultDiaperTime();
-        this.renderFeedingList();
-        this.renderDiaperList();
-        this.updateDiaperTodaySummary();
+        await this.renderFeedingList();
+        await this.renderDiaperList();
+        await this.updateDiaperTodaySummary();
         this.requestNotificationPermission();
         this.checkNextFeeding();
-        this.updateStats('today');
-        this.updateGraphs('today');
+        await this.updateStats('today');
+        await this.updateGraphs('today');
         this.applyDarkMode();
+        this.updateStorageStatus();
     }
 
     // Setup Event Listeners
@@ -99,9 +122,9 @@ class FeedingTracker {
         });
 
         // Timezone change
-        document.getElementById('timezone').addEventListener('change', (e) => {
+        document.getElementById('timezone').addEventListener('change', async (e) => {
             this.timezone = e.target.value;
-            this.saveToLocalStorage();
+            await this.saveToStorage();
         });
 
         // Export/Import
@@ -110,42 +133,52 @@ class FeedingTracker {
 
         // Statistics filters (also updates graphs now)
         document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
                 const period = e.target.dataset.period;
-                this.updateStats(period);
-                this.updateGraphs(period);
+                await this.updateStats(period);
+                await this.updateGraphs(period);
             });
         });
 
         // Dark mode toggle
-        document.getElementById('dark-mode-toggle').addEventListener('change', (e) => {
+        document.getElementById('dark-mode-toggle').addEventListener('change', async (e) => {
             this.darkMode = e.target.checked;
             this.applyDarkMode();
-            this.saveToLocalStorage();
+            await this.saveToStorage();
         });
 
         // Default interval change
-        document.getElementById('next-feeding-interval').addEventListener('change', (e) => {
+        document.getElementById('next-feeding-interval').addEventListener('change', async (e) => {
             this.defaultInterval = parseFloat(e.target.value);
-            this.saveToLocalStorage();
+            await this.saveToStorage();
         });
 
         // Clear all data
-        document.getElementById('clear-all-data').addEventListener('click', () => {
+        document.getElementById('clear-all-data').addEventListener('click', async () => {
             if (confirm('¿Estás seguro de que quieres eliminar TODOS los registros? Esta acción no se puede deshacer.')) {
                 if (confirm('Última confirmación: ¿Realmente quieres borrar todos los datos?')) {
-                    this.feedings = [];
-                    this.diapers = [];
-                    this.saveToLocalStorage();
-                    this.renderFeedingList();
-                    this.renderDiaperList();
-                    this.updateDiaperTodaySummary();
-                    this.updateStats('today');
-                    this.updateGraphs('today');
-                    alert('Todos los datos han sido eliminados.');
-                    this.clearNextFeedingSchedule();
+                    try {
+                        if (this.useIndexedDB) {
+                            await db.clearAllData();
+                        }
+                        this.feedings = [];
+                        this.diapers = [];
+                        if (!this.useIndexedDB) {
+                            this.saveToLocalStorage();
+                        }
+                        await this.renderFeedingList();
+                        await this.renderDiaperList();
+                        await this.updateDiaperTodaySummary();
+                        await this.updateStats('today');
+                        await this.updateGraphs('today');
+                        alert('Todos los datos han sido eliminados.');
+                        this.clearNextFeedingSchedule();
+                    } catch (error) {
+                        console.error('Failed to clear data:', error);
+                        alert('Error al eliminar los datos.');
+                    }
                 }
             }
         });
@@ -167,6 +200,38 @@ class FeedingTracker {
         }
     }
 
+    // Storage Status
+    updateStorageStatus() {
+        const statusContainer = document.getElementById('storage-status');
+        if (!statusContainer) return;
+
+        const indicator = statusContainer.querySelector('.status-indicator');
+        if (!indicator) return;
+
+        // Remove existing classes
+        indicator.classList.remove('indexeddb', 'localstorage', 'error');
+
+        if (this.storageType === 'indexeddb') {
+            indicator.classList.add('indexeddb');
+            indicator.innerHTML = `
+                <span class="status-icon">✅</span>
+                <span class="status-text">IndexedDB (Sin límites)</span>
+            `;
+        } else if (this.storageType === 'localstorage') {
+            indicator.classList.add('localstorage');
+            indicator.innerHTML = `
+                <span class="status-icon">⚠️</span>
+                <span class="status-text">localStorage (Modo de compatibilidad)</span>
+            `;
+        } else {
+            indicator.classList.add('error');
+            indicator.innerHTML = `
+                <span class="status-icon">❌</span>
+                <span class="status-text">Error de almacenamiento</span>
+            `;
+        }
+    }
+
     // Dark Mode
     applyDarkMode() {
         if (this.darkMode) {
@@ -179,7 +244,7 @@ class FeedingTracker {
     }
 
     // Tab Management
-    switchTab(tabName) {
+    async switchTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(content => {
             content.classList.remove('active');
         });
@@ -192,8 +257,8 @@ class FeedingTracker {
 
         if (tabName === 'statistics') {
             const activePeriod = document.querySelector('.filter-btn.active').dataset.period;
-            this.updateStats(activePeriod);
-            this.updateGraphs(activePeriod);
+            await this.updateStats(activePeriod);
+            await this.updateGraphs(activePeriod);
         }
     }
 
@@ -230,13 +295,12 @@ class FeedingTracker {
     }
 
     // Feeding Management
-    addFeeding() {
+    async addFeeding() {
         const timeInput = document.getElementById('feeding-time').value;
         const interval = this.defaultInterval; // Use default interval from settings
 
         const feeding = {
-            id: Date.now(),
-            timestamp: new Date(timeInput).toISOString(),
+            time: new Date(timeInput).toISOString(),
             type: this.currentFeedingType,
             nextFeedingInterval: interval,
             timezone: this.timezone
@@ -258,38 +322,71 @@ class FeedingTracker {
             feeding.duration = duration;
         }
 
-        this.feedings.unshift(feeding);
-        this.saveToLocalStorage();
-        this.renderFeedingList();
-        this.setDefaultDateTime();
-        
-        // Clear inputs
-        document.getElementById('milk-amount').value = '';
-        document.getElementById('feeding-duration').value = '';
-        document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
-        document.querySelectorAll('.duration-btn').forEach(b => b.classList.remove('selected'));
-        
-    this.scheduleNextFeeding(interval, new Date(timeInput));
-        this.updateStats('today');
-        this.updateGraphs('today');
-        
-        // Switch to active filter if in stats tab
-        const activeTab = document.querySelector('.tab-button.active').dataset.tab;
-        if (activeTab === 'statistics') {
-            const activePeriod = document.querySelector('.filter-btn.active').dataset.period;
-            this.updateStats(activePeriod);
-            this.updateGraphs(activePeriod);
+        try {
+            if (this.useIndexedDB) {
+                // Save to IndexedDB
+                const id = await db.addFeeding(feeding);
+                // Add to local array with proper format
+                this.feedings.unshift({
+                    id,
+                    timestamp: feeding.time,
+                    ...feeding
+                });
+            } else {
+                // Fallback to localStorage
+                const localFeeding = {
+                    id: Date.now(),
+                    timestamp: feeding.time,
+                    ...feeding
+                };
+                this.feedings.unshift(localFeeding);
+                this.saveToLocalStorage();
+            }
+
+            await this.renderFeedingList();
+            this.setDefaultDateTime();
+            
+            // Clear inputs
+            document.getElementById('milk-amount').value = '';
+            document.getElementById('feeding-duration').value = '';
+            document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+            document.querySelectorAll('.duration-btn').forEach(b => b.classList.remove('selected'));
+            
+            this.scheduleNextFeeding(interval, new Date(timeInput));
+            await this.updateStats('today');
+            await this.updateGraphs('today');
+            
+            // Switch to active filter if in stats tab
+            const activeTab = document.querySelector('.tab-button.active').dataset.tab;
+            if (activeTab === 'statistics') {
+                const activePeriod = document.querySelector('.filter-btn.active').dataset.period;
+                await this.updateStats(activePeriod);
+                await this.updateGraphs(activePeriod);
+            }
+        } catch (error) {
+            console.error('Failed to add feeding:', error);
+            alert('Error al guardar la alimentación. Por favor intenta de nuevo.');
         }
     }
 
-    deleteFeeding(id) {
+    async deleteFeeding(id) {
         if (confirm('¿Estás seguro de que quieres eliminar este registro?')) {
-            this.feedings = this.feedings.filter(f => f.id !== id);
-            this.saveToLocalStorage();
-            this.renderFeedingList();
-            this.updateStats('today');
-            this.updateGraphs('today');
-            this.recalculateNextFeedingFromHistory();
+            try {
+                if (this.useIndexedDB) {
+                    await db.deleteFeeding(id);
+                }
+                this.feedings = this.feedings.filter(f => f.id !== id);
+                if (!this.useIndexedDB) {
+                    this.saveToLocalStorage();
+                }
+                await this.renderFeedingList();
+                await this.updateStats('today');
+                await this.updateGraphs('today');
+                this.recalculateNextFeedingFromHistory();
+            } catch (error) {
+                console.error('Failed to delete feeding:', error);
+                alert('Error al eliminar la alimentación.');
+            }
         }
     }
 
@@ -337,7 +434,7 @@ class FeedingTracker {
     }
 
     // Diaper Management
-    addDiaper() {
+    async addDiaper() {
         const timeInput = document.getElementById('diaper-time').value;
         const hasPee = document.getElementById('has-pee').checked;
         const hasPoop = document.getElementById('has-poop').checked;
@@ -349,8 +446,7 @@ class FeedingTracker {
         }
 
         const diaper = {
-            id: Date.now(),
-            timestamp: new Date(timeInput).toISOString(),
+            time: new Date(timeInput).toISOString(),
             hasPee: hasPee,
             hasPoop: hasPoop,
             level: this.currentDiaperLevel,
@@ -358,33 +454,63 @@ class FeedingTracker {
             timezone: this.timezone
         };
 
-        this.diapers.unshift(diaper);
-        this.saveToLocalStorage();
-        this.renderDiaperList();
-        this.updateDiaperTodaySummary();
-        this.setDefaultDiaperTime();
-        document.getElementById('diaper-notes').value = '';
-        
-        // Update stats and graphs
-        this.updateStats('today');
-        this.updateGraphs('today');
-        
-        const activeTab = document.querySelector('.tab-button.active').dataset.tab;
-        if (activeTab === 'statistics') {
-            const activePeriod = document.querySelector('.filter-btn.active').dataset.period;
-            this.updateStats(activePeriod);
-            this.updateGraphs(activePeriod);
+        try {
+            if (this.useIndexedDB) {
+                const id = await db.addDiaper(diaper);
+                this.diapers.unshift({
+                    id,
+                    timestamp: diaper.time,
+                    ...diaper
+                });
+            } else {
+                const localDiaper = {
+                    id: Date.now(),
+                    timestamp: diaper.time,
+                    ...diaper
+                };
+                this.diapers.unshift(localDiaper);
+                this.saveToLocalStorage();
+            }
+
+            await this.renderDiaperList();
+            await this.updateDiaperTodaySummary();
+            this.setDefaultDiaperTime();
+            document.getElementById('diaper-notes').value = '';
+            
+            // Update stats and graphs
+            await this.updateStats('today');
+            await this.updateGraphs('today');
+            
+            const activeTab = document.querySelector('.tab-button.active').dataset.tab;
+            if (activeTab === 'statistics') {
+                const activePeriod = document.querySelector('.filter-btn.active').dataset.period;
+                await this.updateStats(activePeriod);
+                await this.updateGraphs(activePeriod);
+            }
+        } catch (error) {
+            console.error('Failed to add diaper:', error);
+            alert('Error al guardar el cambio de pañal.');
         }
     }
 
-    deleteDiaper(id) {
+    async deleteDiaper(id) {
         if (confirm('¿Estás seguro de que quieres eliminar este registro de pañal?')) {
-            this.diapers = this.diapers.filter(d => d.id !== id);
-            this.saveToLocalStorage();
-            this.renderDiaperList();
-            this.updateDiaperTodaySummary();
-            this.updateStats('today');
-            this.updateGraphs('today');
+            try {
+                if (this.useIndexedDB) {
+                    await db.deleteDiaper(id);
+                }
+                this.diapers = this.diapers.filter(d => d.id !== id);
+                if (!this.useIndexedDB) {
+                    this.saveToLocalStorage();
+                }
+                await this.renderDiaperList();
+                await this.updateDiaperTodaySummary();
+                await this.updateStats('today');
+                await this.updateGraphs('today');
+            } catch (error) {
+                console.error('Failed to delete diaper:', error);
+                alert('Error al eliminar el cambio de pañal.');
+            }
         }
     }
 
@@ -1220,13 +1346,73 @@ class FeedingTracker {
         event.target.value = '';
     }
 
-    // Local Storage
+    // Storage Management (supports both IndexedDB and localStorage)
+    async saveToStorage() {
+        if (this.useIndexedDB) {
+            // IndexedDB saves happen immediately on add/delete, so we just save settings
+            await db.setMetadata('timezone', this.timezone);
+            await db.setMetadata('darkMode', this.darkMode);
+            await db.setMetadata('defaultInterval', this.defaultInterval);
+        } else {
+            // Fallback to localStorage
+            this.saveToLocalStorage();
+        }
+    }
+
     saveToLocalStorage() {
         localStorage.setItem('feedings', JSON.stringify(this.feedings));
         localStorage.setItem('diapers', JSON.stringify(this.diapers));
         localStorage.setItem('timezone', this.timezone);
         localStorage.setItem('darkMode', JSON.stringify(this.darkMode));
         localStorage.setItem('defaultInterval', this.defaultInterval.toString());
+    }
+
+    // Load from IndexedDB
+    async loadFromStorage() {
+        try {
+            // Load feedings
+            const feedingsData = await db.getFeedings();
+            this.feedings = feedingsData.map(f => ({
+                id: f.id,
+                timestamp: f.time, // Convert back to old format
+                type: f.type,
+                amount: f.amount,
+                duration: f.duration,
+                nextFeedingInterval: f.nextFeedingInterval,
+                timezone: f.timezone
+            }));
+
+            // Load diapers
+            const diapersData = await db.getDiapers();
+            this.diapers = diapersData.map(d => ({
+                id: d.id,
+                timestamp: d.time, // Convert back to old format
+                hasPee: d.hasPee,
+                hasPoop: d.hasPoop,
+                level: d.level,
+                notes: d.notes,
+                timezone: d.timezone
+            }));
+
+            // Load settings from metadata
+            const timezone = await db.getMetadata('timezone');
+            if (timezone) this.timezone = timezone;
+
+            const darkMode = await db.getMetadata('darkMode');
+            if (darkMode !== null) this.darkMode = darkMode;
+
+            const defaultInterval = await db.getMetadata('defaultInterval');
+            if (defaultInterval) {
+                this.defaultInterval = defaultInterval;
+                const intervalInput = document.getElementById('next-feeding-interval');
+                if (intervalInput) intervalInput.value = this.defaultInterval;
+            }
+
+            console.log(`📊 Loaded ${this.feedings.length} feedings and ${this.diapers.length} diapers from IndexedDB`);
+        } catch (error) {
+            console.error('Failed to load from IndexedDB:', error);
+            throw error;
+        }
     }
 
     loadFromLocalStorage() {
@@ -1253,13 +1439,15 @@ class FeedingTracker {
         const defaultIntervalData = localStorage.getItem('defaultInterval');
         if (defaultIntervalData) {
             this.defaultInterval = parseFloat(defaultIntervalData);
-            document.getElementById('next-feeding-interval').value = this.defaultInterval;
+            const intervalInput = document.getElementById('next-feeding-interval');
+            if (intervalInput) intervalInput.value = this.defaultInterval;
         }
     }
 }
 
 // Initialize the app
 let tracker;
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     tracker = new FeedingTracker();
+    await tracker.init();
 });

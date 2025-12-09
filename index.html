@@ -214,13 +214,27 @@
                 </div>
 
                 <div class="setting-item">
+                    <label>Sistema de Almacenamiento</label>
+                    <div id="storage-status" class="storage-status">
+                        <div class="status-indicator">
+                            <span class="status-icon">⏳</span>
+                            <span class="status-text">Inicializando...</span>
+                        </div>
+                    </div>
+                    <p class="setting-description">Estado del sistema de almacenamiento de datos</p>
+                </div>
+
+                <div class="setting-item">
                     <label>Versión</label>
-                    <p class="setting-description">Control de Alimentación v1.2</p>
+                    <p class="setting-description">Control de Alimentación v2.0 (IndexedDB)</p>
                 </div>
             </section>
         </div>
     </div>
 
+    <!-- Load in order: db, migration, then app -->
+    <script src="db.js"></script>
+    <script src="migration.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
