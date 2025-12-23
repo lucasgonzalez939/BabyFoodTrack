@@ -13,6 +13,7 @@
             <div class="app-icon">🍼</div>
             <button class="tab-button active" data-tab="tracker">Registro</button>
             <button class="tab-button" data-tab="diapers">Pañales</button>
+            <button class="tab-button" data-tab="growth">Crecimiento</button>
             <button class="tab-button" data-tab="statistics">Estadísticas</button>
             <button class="tab-button" data-tab="settings">Ajustes</button>
         </nav>
@@ -64,6 +65,9 @@
             <section class="next-feeding-alert">
                 <div id="next-feeding-info" class="alert-info">
                     <p>No hay tomas programadas</p>
+                </div>
+                <div id="daily-progress-info" class="alert-info" style="margin-top: 10px; display: none;">
+                    <!-- Daily progress will be injected here -->
                 </div>
             </section>
 
@@ -136,6 +140,61 @@
             </section>
         </div>
 
+        <!-- Growth Tab -->
+        <div id="growth" class="tab-content">
+            <section class="age-display">
+                <h2>Edad del Bebé</h2>
+                <div class="age-cards">
+                    <div class="age-card">
+                        <div class="age-value" id="age-days">0</div>
+                        <div class="age-label">Días</div>
+                    </div>
+                    <div class="age-card">
+                        <div class="age-value" id="age-weeks">0</div>
+                        <div class="age-label">Semanas</div>
+                    </div>
+                    <div class="age-card">
+                        <div class="age-value" id="age-months">0</div>
+                        <div class="age-label">Meses</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="add-measurement">
+                <h2>Registrar Medidas</h2>
+                <form id="weight-form">
+                    <div class="form-group">
+                        <label for="weight-time">Fecha:</label>
+                        <input type="datetime-local" id="weight-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="weight-value">Peso (kg):</label>
+                        <input type="number" id="weight-value" step="0.01" min="0" placeholder="Ej: 3.5">
+                    </div>
+                    <div class="form-group">
+                        <label for="height-value">Altura (cm):</label>
+                        <input type="number" id="height-value" step="0.1" min="0" placeholder="Ej: 50.5">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Guardar Medidas</button>
+                </form>
+            </section>
+
+            <section class="growth-stats">
+                <div class="stat-card">
+                    <div class="stat-label">Percentil Estimado</div>
+                    <div class="stat-value" id="percentile-display">--</div>
+                    <div class="stat-subtext">Basado en estándares OMS</div>
+                </div>
+            </section>
+
+            <section class="measurement-history">
+                <h3>Historial de Crecimiento</h3>
+                <div id="measurement-list" class="feeding-list">
+                    <!-- Measurements will be listed here -->
+                </div>
+            </section>
+        </div>
+
         <!-- Statistics Tab -->
         <div id="statistics" class="tab-content">
             <section class="stats-section">
@@ -143,7 +202,9 @@
                 
                 <div class="stats-filter">
                     <button class="filter-btn active" data-period="today">Hoy</button>
-                    <button class="filter-btn" data-period="week">Esta Semana</button>
+                    <button class="filter-btn" data-period="week">Semana</button>
+                    <button class="filter-btn" data-period="month">Mes</button>
+                    <button class="filter-btn" data-period="all">Todo</button>
                 </div>
 
                 <h3>Resumen</h3>
@@ -160,6 +221,16 @@
                 <div class="graph-container">
                     <canvas id="amounts-chart"></canvas>
                 </div>
+
+                <h3>Progreso de Peso (kg)</h3>
+                <div class="graph-container">
+                    <canvas id="weight-chart"></canvas>
+                </div>
+
+                <h3>Progreso de Altura (cm)</h3>
+                <div class="graph-container">
+                    <canvas id="height-chart"></canvas>
+                </div>
             </section>
         </div>
 
@@ -168,6 +239,37 @@
             <section class="settings-section">
                 <h2>Configuración</h2>
                 
+                <!-- Baby Settings -->
+                <div class="setting-item">
+                    <label for="birth-date">Fecha de Nacimiento</label>
+                    <input type="date" id="birth-date" class="setting-input">
+                    <p class="setting-description">Para calcular la edad y percentiles</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="daily-milk-target">Meta Diaria de Leche (ml)</label>
+                    <input type="number" id="daily-milk-target" class="setting-input" min="0" step="10" value="0" placeholder="Ej: 750">
+                    <p class="setting-description">Objetivo diario de consumo de leche</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="next-feeding-interval">Intervalo Predeterminado (horas)</label>
+                    <input type="number" id="next-feeding-interval" class="setting-input" min="1" max="12" step="0.5" value="3.5">
+                    <p class="setting-description">Tiempo predeterminado hasta la próxima toma</p>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-header">
+                        <label for="notifications-toggle">Notificaciones</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="notifications-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="setting-description">Recibir alertas cuando sea hora de la próxima toma</p>
+                </div>
+
+                <!-- App Settings -->
                 <div class="setting-item">
                     <div class="setting-header">
                         <label for="dark-mode-toggle">Modo Oscuro</label>
@@ -180,12 +282,6 @@
                 </div>
 
                 <div class="setting-item">
-                    <label for="next-feeding-interval">Intervalo Predeterminado (horas)</label>
-                    <input type="number" id="next-feeding-interval" class="setting-input" min="1" max="12" step="0.5" value="3.5">
-                    <p class="setting-description">Tiempo predeterminado hasta la próxima toma</p>
-                </div>
-
-                <div class="setting-item">
                     <label for="timezone">Zona Horaria</label>
                     <select id="timezone" class="setting-select">
                         <!-- Will be populated by JavaScript -->
@@ -193,6 +289,7 @@
                     <p class="setting-description">Configura tu zona horaria para registros precisos</p>
                 </div>
 
+                <!-- Data Management -->
                 <div class="setting-item">
                     <label>Importar / Exportar Datos</label>
                     <div class="setting-actions">
@@ -213,6 +310,7 @@
                     <p class="setting-description">Elimina permanentemente todos los registros de alimentación</p>
                 </div>
 
+                <!-- System Info -->
                 <div class="setting-item">
                     <label>Sistema de Almacenamiento</label>
                     <div id="storage-status" class="storage-status">

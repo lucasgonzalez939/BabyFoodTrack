@@ -4,12 +4,13 @@
  */
 
 const DB_NAME = 'BabyFoodTrackDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Object store names
 const STORES = {
     FEEDINGS: 'feedings',
     DIAPERS: 'diapers',
+    MEASUREMENTS: 'measurements',
     METADATA: 'metadata'
 };
 
@@ -78,6 +79,20 @@ class BabyFoodDB {
                     diaperStore.createIndex('hasPoop', 'hasPoop', { unique: false });
                     
                     console.log('Diapers store created');
+                }
+
+                // Create Measurements object store
+                if (!db.objectStoreNames.contains(STORES.MEASUREMENTS)) {
+                    const measurementStore = db.createObjectStore(STORES.MEASUREMENTS, {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+
+                    // Indexes for efficient querying
+                    measurementStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    measurementStore.createIndex('date', 'date', { unique: false });
+                    
+                    console.log('Measurements store created');
                 }
 
                 // Create Metadata object store (for app settings, migration status, etc.)
@@ -411,6 +426,94 @@ class BabyFoodDB {
         });
     }
 
+    // ============= MEASUREMENT OPERATIONS =============
+
+    /**
+     * Add a new measurement record
+     * @param {Object} measurement - Measurement data
+     * @returns {Promise<number>} - The ID of the added record
+     */
+    async addMeasurement(measurement) {
+        await this.ensureInit();
+
+        // Add computed fields for indexing
+        const timestamp = new Date(measurement.time).getTime();
+        const date = new Date(measurement.time).toISOString().split('T')[0];
+
+        const measurementData = {
+            ...measurement,
+            timestamp,
+            date,
+            createdAt: Date.now()
+        };
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEASUREMENTS], 'readwrite');
+            const store = transaction.objectStore(STORES.MEASUREMENTS);
+            const request = store.add(measurementData);
+
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    /**
+     * Get all measurements
+     * @returns {Promise<Array>}
+     */
+    async getMeasurements() {
+        await this.ensureInit();
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEASUREMENTS], 'readonly');
+            const store = transaction.objectStore(STORES.MEASUREMENTS);
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const results = request.result;
+                // Sort by timestamp descending
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    /**
+     * Delete a measurement record
+     * @param {number} id
+     * @returns {Promise<void>}
+     */
+    async deleteMeasurement(id) {
+        await this.ensureInit();
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEASUREMENTS], 'readwrite');
+            const store = transaction.objectStore(STORES.MEASUREMENTS);
+            const request = store.delete(id);
+
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    /**
+     * Delete all measurements
+     * @returns {Promise<void>}
+     */
+    async clearMeasurements() {
+        await this.ensureInit();
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEASUREMENTS], 'readwrite');
+            const store = transaction.objectStore(STORES.MEASUREMENTS);
+            const request = store.clear();
+
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
     // ============= METADATA OPERATIONS =============
 
     /**
@@ -461,7 +564,8 @@ class BabyFoodDB {
 
         await Promise.all([
             this.clearFeedings(),
-            this.clearDiapers()
+            this.clearDiapers(),
+            this.clearMeasurements()
         ]);
     }
 

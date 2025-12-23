@@ -771,6 +771,67 @@ body.dark-mode .filter-btn {
     height: auto;
 }
 
+/* Growth Tab Styles */
+.age-display {
+    margin-bottom: 1.5rem;
+}
+
+.age-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.age-card {
+    background: var(--card-background);
+    padding: 1rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+.age-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.age-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.growth-stats {
+    margin-top: 1.5rem;
+}
+
+.stat-subtext {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+/* Progress Bar */
+.full-width {
+    grid-column: 1 / -1;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 10px;
+    background-color: var(--border-color);
+    border-radius: 5px;
+    margin: 0.5rem 0;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: var(--secondary-color);
+    transition: width 0.5s ease;
+}
+
 /* Tablet and up */
 @media (min-width: 768px) {
     .tabs {
