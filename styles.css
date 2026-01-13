@@ -1103,3 +1103,403 @@ body.dark-mode .status-indicator.localstorage {
 body.dark-mode .status-indicator.error {
     background-color: rgba(239, 83, 80, 0.15);
 }
+
+/* Health Tab Styles */
+.medicine-section, .temperature-section, .appointments-section, .journal-section {
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.medicine-section:last-child, .temperature-section:last-child, 
+.appointments-section:last-child, .journal-section:last-child {
+    border-bottom: none;
+}
+
+.medicine-list, .appointment-list, .journal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.medicine-due {
+    border-left: 4px solid var(--danger-color);
+    background-color: rgba(231, 76, 60, 0.05);
+}
+
+.temperature-fever {
+    border-left: 4px solid var(--danger-color);
+    background-color: rgba(231, 76, 60, 0.05);
+}
+
+.appointment-upcoming {
+    border-left: 4px solid var(--secondary-color);
+    background-color: rgba(80, 200, 120, 0.05);
+}
+
+.journal-entry {
+    background-color: var(--card-background);
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--primary-color);
+}
+
+.journal-emergency {
+    border-left-color: var(--danger-color);
+    background-color: rgba(231, 76, 60, 0.05);
+}
+
+.journal-description {
+    margin: 0.5rem 0;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.journal-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.tag {
+    display: inline-block;
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+body.dark-mode .medicine-due {
+    background-color: rgba(239, 83, 80, 0.1);
+}
+
+body.dark-mode .temperature-fever {
+    background-color: rgba(239, 83, 80, 0.1);
+}
+
+body.dark-mode .appointment-upcoming {
+    background-color: rgba(102, 187, 106, 0.1);
+}
+
+body.dark-mode .journal-emergency {
+    background-color: rgba(239, 83, 80, 0.1);
+}
+
+/* Analytics Section Styles */
+.analytics-section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 3px solid var(--border-color);
+}
+
+.section-description {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+}
+
+.analytics-controls {
+    background-color: var(--card-background);
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 2rem;
+}
+
+.time-range-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.time-range-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid var(--border-color);
+    background-color: var(--background);
+    color: var(--text-primary);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: var(--touch-size);
+}
+
+.time-range-btn:hover {
+    border-color: var(--primary-color);
+    background-color: var(--card-background);
+}
+
+.time-range-btn.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.variable-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.analytics-results {
+    margin-top: 2rem;
+}
+
+.analytics-summary {
+    margin-bottom: 2rem;
+}
+
+.analytics-insights {
+    background-color: var(--card-background);
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--primary-color);
+}
+
+.insight-item {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background-color: var(--background);
+    border-radius: 8px;
+    border-left: 3px solid var(--secondary-color);
+}
+
+.insight-item:last-child {
+    margin-bottom: 0;
+}
+
+.insight-item strong {
+    color: var(--primary-color);
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.insight-positive {
+    border-left-color: var(--secondary-color);
+}
+
+.insight-warning {
+    border-left-color: #ffc107;
+}
+
+.insight-negative {
+    border-left-color: var(--danger-color);
+}
+
+@media (max-width: 768px) {
+    .time-range-selector {
+        flex-direction: column;
+    }
+    
+    .time-range-btn {
+        width: 100%;
+    }
+    
+    .variable-checkboxes {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Collapsible Section Styles */
+.collapsible-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 1rem;
+    background-color: var(--card-background);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s ease;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.collapsible-header:hover {
+    background-color: var(--background);
+}
+
+.collapsible-header:active {
+    transform: scale(0.98);
+}
+
+.collapsible-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.collapsible-toggle {
+    font-size: 1.5rem;
+    transition: transform 0.3s ease;
+    color: var(--text-secondary);
+}
+
+.collapsible-header.collapsed .collapsible-toggle {
+    transform: rotate(-90deg);
+}
+
+.collapsible-content {
+    max-height: 5000px;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+    opacity: 1;
+    margin-bottom: 1.5rem;
+}
+
+.collapsible-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+}
+
+.section-with-button {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.section-with-button h2 {
+    margin: 0;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.3s ease;
+}
+
+.modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: var(--card-background);
+    border-radius: 12px;
+    padding: 0;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background-color: var(--background);
+    color: var(--text-primary);
+}
+
+.modal form {
+    padding: 1.5rem;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    padding-top: 1rem;
+    border-top: 2px solid var(--border-color);
+    margin-top: 1rem;
+}
+
+.modal-actions button {
+    min-width: 100px;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        max-height: 95vh;
+    }
+    
+    .modal-header {
+        padding: 1rem;
+    }
+    
+    .modal form {
+        padding: 1rem;
+    }
+    
+    .modal-actions {
+        flex-direction: column-reverse;
+    }
+    
+    .modal-actions button {
+        width: 100%;
+    }
+}
+

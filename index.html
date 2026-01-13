@@ -14,53 +14,17 @@
             <button class="tab-button active" data-tab="tracker">Registro</button>
             <button class="tab-button" data-tab="diapers">Pañales</button>
             <button class="tab-button" data-tab="growth">Crecimiento</button>
+            <button class="tab-button" data-tab="health">Salud</button>
             <button class="tab-button" data-tab="statistics">Estadísticas</button>
             <button class="tab-button" data-tab="settings">Ajustes</button>
         </nav>
 
         <!-- Tracker Tab -->
         <div id="tracker" class="tab-content active">
-            <section class="add-feeding">
+            <div class="section-with-button">
                 <h2>Registrar Alimentación</h2>
-                <form id="feeding-form">
-                    <div class="form-group">
-                        <label for="feeding-type">Tipo de alimentación:</label>
-                        <div class="type-selector">
-                            <button type="button" class="type-btn active" data-type="bottle">🍼 Biberón</button>
-                            <button type="button" class="type-btn" data-type="breast">🤱 Pecho</button>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="feeding-time">Fecha y hora:</label>
-                        <input type="datetime-local" id="feeding-time" required>
-                    </div>
-                    
-                    <div class="form-group" id="amount-group">
-                        <label for="milk-amount">Cantidad (ml):</label>
-                        <div class="quick-amounts">
-                            <button type="button" class="amount-btn" data-amount="60">60ml</button>
-                            <button type="button" class="amount-btn" data-amount="90">90ml</button>
-                            <button type="button" class="amount-btn" data-amount="120">120ml</button>
-                            <button type="button" class="amount-btn" data-amount="150">150ml</button>
-                        </div>
-                        <input type="number" id="milk-amount" min="0" step="1" placeholder="O ingresa cantidad">
-                    </div>
-
-                    <div class="form-group hidden" id="duration-group">
-                        <label for="feeding-duration">Duración (minutos):</label>
-                        <div class="quick-durations">
-                            <button type="button" class="duration-btn" data-duration="10">10 min</button>
-                            <button type="button" class="duration-btn" data-duration="15">15 min</button>
-                            <button type="button" class="duration-btn" data-duration="20">20 min</button>
-                            <button type="button" class="duration-btn" data-duration="30">30 min</button>
-                        </div>
-                        <input type="number" id="feeding-duration" min="1" step="1" placeholder="O ingresa duración">
-                    </div>
-                    
-                    <button type="submit" class="btn btn-primary">Agregar Registro</button>
-                </form>
-            </section>
+                <button id="add-feeding-btn" class="btn btn-primary">+ Nueva Toma</button>
+            </div>
 
             <section class="next-feeding-alert">
                 <div id="next-feeding-info" class="alert-info">
@@ -72,70 +36,46 @@
             </section>
 
             <section class="feeding-history">
-                <div class="section-header">
-                    <h2>Historial</h2>
+                <div class="collapsible-header" data-target="feeding-list-container">
+                    <h3><span>📋</span> Historial</h3>
+                    <span class="collapsible-toggle">▼</span>
                 </div>
-                <div id="feeding-list" class="feeding-list">
-                    <!-- Feeding records will be displayed here -->
+                <div id="feeding-list-container" class="collapsible-content">
+                    <div id="feeding-list" class="feeding-list">
+                        <!-- Feeding records will be displayed here -->
+                    </div>
                 </div>
             </section>
         </div>
 
         <!-- Diapers Tab -->
         <div id="diapers" class="tab-content">
-            <section class="add-diaper">
+            <div class="section-with-button">
                 <h2>Cambio de Pañal</h2>
-                <form id="diaper-form">
-                    <div class="form-group">
-                        <label for="diaper-time">Fecha y hora:</label>
-                        <input type="datetime-local" id="diaper-time" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Tipo de cambio:</label>
-                        <div class="diaper-type-selector">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="has-pee" checked>
-                                <span class="checkbox-custom">💧 Pipí</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="has-poop">
-                                <span class="checkbox-custom">💩 Popó</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="diaper-level">Nivel de llenado:</label>
-                        <div class="level-selector">
-                            <button type="button" class="level-btn" data-level="1">Bajo</button>
-                            <button type="button" class="level-btn active" data-level="2">Medio</button>
-                            <button type="button" class="level-btn" data-level="3">Alto</button>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="diaper-notes">Notas (opcional):</label>
-                        <textarea id="diaper-notes" rows="3" placeholder="Ej: Color, consistencia, etc."></textarea>
-                    </div>
-                    
-                    <button type="submit" class="btn btn-primary">Registrar Cambio</button>
-                </form>
-            </section>
+                <button id="add-diaper-btn" class="btn btn-primary">+ Nuevo Cambio</button>
+            </div>
 
             <section class="diaper-stats-quick">
-                <h3>Resumen de Hoy</h3>
-                <div id="diaper-today-summary" class="quick-stats">
-                    <!-- Quick stats will be displayed here -->
+                <div class="collapsible-header" data-target="diaper-summary-container">
+                    <h3><span>�</span> Resumen de Hoy</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="diaper-summary-container" class="collapsible-content">
+                    <div id="diaper-today-summary" class="quick-stats">
+                        <!-- Quick stats will be displayed here -->
+                    </div>
                 </div>
             </section>
 
             <section class="diaper-history">
-                <div class="section-header">
-                    <h2>Historial de Pañales</h2>
+                <div class="collapsible-header" data-target="diaper-list-container">
+                    <h3><span>📋</span> Historial de Pañales</h3>
+                    <span class="collapsible-toggle">▼</span>
                 </div>
-                <div id="diaper-list" class="diaper-list">
-                    <!-- Diaper records will be displayed here -->
+                <div id="diaper-list-container" class="collapsible-content">
+                    <div id="diaper-list" class="diaper-list">
+                        <!-- Diaper records will be displayed here -->
+                    </div>
                 </div>
             </section>
         </div>
@@ -143,54 +83,161 @@
         <!-- Growth Tab -->
         <div id="growth" class="tab-content">
             <section class="age-display">
-                <h2>Edad del Bebé</h2>
-                <div class="age-cards">
-                    <div class="age-card">
-                        <div class="age-value" id="age-days">0</div>
-                        <div class="age-label">Días</div>
-                    </div>
-                    <div class="age-card">
-                        <div class="age-value" id="age-weeks">0</div>
-                        <div class="age-label">Semanas</div>
-                    </div>
-                    <div class="age-card">
-                        <div class="age-value" id="age-months">0</div>
-                        <div class="age-label">Meses</div>
+                <div class="collapsible-header" data-target="age-display-container">
+                    <h3><span>👶</span> Edad del Bebé</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="age-display-container" class="collapsible-content">
+                    <div class="age-cards">
+                        <div class="age-card">
+                            <div class="age-value" id="age-days">0</div>
+                            <div class="age-label">Días</div>
+                        </div>
+                        <div class="age-card">
+                            <div class="age-value" id="age-weeks">0</div>
+                            <div class="age-label">Semanas</div>
+                        </div>
+                        <div class="age-card">
+                            <div class="age-value" id="age-months">0</div>
+                            <div class="age-label">Meses</div>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <section class="add-measurement">
+            <div class="section-with-button">
                 <h2>Registrar Medidas</h2>
-                <form id="weight-form">
-                    <div class="form-group">
-                        <label for="weight-time">Fecha:</label>
-                        <input type="datetime-local" id="weight-time" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="weight-value">Peso (kg):</label>
-                        <input type="number" id="weight-value" step="0.01" min="0" placeholder="Ej: 3.5">
-                    </div>
-                    <div class="form-group">
-                        <label for="height-value">Altura (cm):</label>
-                        <input type="number" id="height-value" step="0.1" min="0" placeholder="Ej: 50.5">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Guardar Medidas</button>
-                </form>
-            </section>
+                <button id="add-measurement-btn" class="btn btn-primary">+ Nueva Medida</button>
+            </div>
 
             <section class="growth-stats">
-                <div class="stat-card">
-                    <div class="stat-label">Percentil Estimado</div>
-                    <div class="stat-value" id="percentile-display">--</div>
-                    <div class="stat-subtext">Basado en estándares OMS</div>
+                <div class="collapsible-header" data-target="growth-stats-container">
+                    <h3><span>📈</span> Percentil Estimado</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="growth-stats-container" class="collapsible-content">
+                    <div class="stat-card">
+                        <div class="stat-label">Percentil Estimado</div>
+                        <div class="stat-value" id="percentile-display">--</div>
+                        <div class="stat-subtext">Basado en estándares OMS</div>
+                    </div>
                 </div>
             </section>
 
             <section class="measurement-history">
-                <h3>Historial de Crecimiento</h3>
-                <div id="measurement-list" class="feeding-list">
-                    <!-- Measurements will be listed here -->
+                <div class="collapsible-header" data-target="measurement-list-container">
+                    <h3><span>📋</span> Historial de Crecimiento</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="measurement-list-container" class="collapsible-content">
+                    <div id="measurement-list" class="feeding-list">
+                        <!-- Measurements will be listed here -->
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Health Tab -->
+        <div id="health" class="tab-content">
+            <!-- Medicine Tracking -->
+            <section class="medicine-section">
+                <div class="section-with-button">
+                    <h2>💊 Control de Medicamentos</h2>
+                    <button id="add-medicine-btn" class="btn btn-primary">+ Agregar</button>
+                </div>
+                
+                <div class="collapsible-header" data-target="available-medicines-container">
+                    <h3><span>💊</span> Medicamentos Disponibles</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="available-medicines-container" class="collapsible-content">
+                    <div id="available-medicines-list" class="medicine-list">
+                        <!-- Available medicines will be listed here -->
+                    </div>
+                </div>
+                
+                <div class="collapsible-header" data-target="medicine-history-container">
+                    <h3><span>📋</span> Historial de Medicamentos</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="medicine-history-container" class="collapsible-content">
+                    <div id="medicine-history-list" class="medicine-list">
+                        <!-- Medicine history will be listed here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Temperature Tracking -->
+            <section class="temperature-section">
+                <div class="section-with-button">
+                    <h2>🌡️ Registro de Temperatura</h2>
+                    <button id="add-temperature-btn" class="btn btn-primary">+ Agregar</button>
+                </div>
+
+                <div class="collapsible-header" data-target="temperature-chart-container">
+                    <h3><span>📈</span> Gráfico de Temperatura</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="temperature-chart-container" class="collapsible-content">
+                    <div class="graph-container">
+                        <canvas id="temperature-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="collapsible-header" data-target="temperature-list-container">
+                    <h3><span>📋</span> Historial de Temperaturas</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="temperature-list-container" class="collapsible-content">
+                    <div id="temperature-list" class="feeding-list">
+                        <!-- Temperature records will be listed here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Appointments -->
+            <section class="appointments-section">
+                <div class="section-with-button">
+                    <h2>📅 Citas Médicas</h2>
+                    <button id="add-appointment-btn" class="btn btn-primary">+ Agregar</button>
+                </div>
+
+                <div class="collapsible-header" data-target="upcoming-appointments-container">
+                    <h3><span>📅</span> Próximas Citas</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="upcoming-appointments-container" class="collapsible-content">
+                    <div id="upcoming-appointments-list" class="appointment-list">
+                        <!-- Upcoming appointments will be listed here -->
+                    </div>
+                </div>
+
+                <div class="collapsible-header" data-target="past-appointments-container">
+                    <h3><span>📋</span> Historial de Citas</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="past-appointments-container" class="collapsible-content">
+                    <div id="past-appointments-list" class="appointment-list">
+                        <!-- Past appointments will be listed here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Journal -->
+            <section class="journal-section">
+                <div class="section-with-button">
+                    <h2>📔 Diario de Eventos</h2>
+                    <button id="add-journal-btn" class="btn btn-primary">+ Agregar</button>
+                </div>
+
+                <div class="collapsible-header" data-target="journal-list-container">
+                    <h3><span>📋</span> Eventos Recientes</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="journal-list-container" class="collapsible-content">
+                    <div id="journal-list" class="journal-list">
+                        <!-- Journal entries will be listed here -->
+                    </div>
                 </div>
             </section>
         </div>
@@ -231,6 +278,85 @@
                 <div class="graph-container">
                     <canvas id="height-chart"></canvas>
                 </div>
+
+                <!-- Advanced Analytics Section -->
+                <section class="analytics-section">
+                    <h2>📊 Análisis Personalizado</h2>
+                    <p class="section-description">Selecciona variables y período de tiempo para analizar patrones y tendencias</p>
+                    
+                    <div class="analytics-controls">
+                        <div class="form-group">
+                            <label>Período de Tiempo:</label>
+                            <div class="time-range-selector">
+                                <button type="button" class="time-range-btn active" data-range="1">Último día</button>
+                                <button type="button" class="time-range-btn" data-range="3">3 días</button>
+                                <button type="button" class="time-range-btn" data-range="7">Semana</button>
+                                <button type="button" class="time-range-btn" data-range="14">2 semanas</button>
+                                <button type="button" class="time-range-btn" data-range="30">Mes</button>
+                                <button type="button" class="time-range-btn" data-range="90">3 meses</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Variables a Analizar:</label>
+                            <div class="variable-checkboxes">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" class="analytics-var" data-var="feedings" checked>
+                                    <span class="checkbox-custom">🍼 Alimentaciones</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" class="analytics-var" data-var="diapers">
+                                    <span class="checkbox-custom">👶 Pañales</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" class="analytics-var" data-var="weight">
+                                    <span class="checkbox-custom">⚖️ Peso</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" class="analytics-var" data-var="height">
+                                    <span class="checkbox-custom">📏 Altura</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" class="analytics-var" data-var="temperature">
+                                    <span class="checkbox-custom">🌡️ Temperatura</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" class="analytics-var" data-var="medicines">
+                                    <span class="checkbox-custom">💊 Medicamentos</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="medicine-filter-group" style="display: none;">
+                            <label for="medicine-filter">Filtrar por Medicamento:</label>
+                            <select id="medicine-filter" class="setting-select">
+                                <option value="">Todos los medicamentos</option>
+                            </select>
+                        </div>
+
+                        <button type="button" id="generate-analytics" class="btn btn-primary">Generar Análisis</button>
+                    </div>
+
+                    <div id="analytics-results" class="analytics-results" style="display: none;">
+                        <h3>Resultados del Análisis</h3>
+                        
+                        <div class="analytics-summary">
+                            <div id="analytics-summary-cards" class="stats-grid">
+                                <!-- Summary cards will be generated here -->
+                            </div>
+                        </div>
+
+                        <h4>Gráfico Comparativo</h4>
+                        <div class="graph-container">
+                            <canvas id="analytics-chart"></canvas>
+                        </div>
+
+                        <h4>Correlaciones y Patrones</h4>
+                        <div id="analytics-insights" class="analytics-insights">
+                            <!-- Insights will be generated here -->
+                        </div>
+                    </div>
+                </section>
             </section>
         </div>
 
@@ -330,9 +456,308 @@
         </div>
     </div>
 
+    <!-- Feeding Modal -->
+    <div id="feeding-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🍼 Registrar Alimentación</h2>
+                <button class="modal-close" id="close-feeding-modal">&times;</button>
+            </div>
+            <form id="feeding-form">
+                <div class="form-group">
+                    <label for="feeding-type">Tipo de alimentación:</label>
+                    <div class="type-selector">
+                        <button type="button" class="type-btn active" data-type="bottle">🍼 Biberón</button>
+                        <button type="button" class="type-btn" data-type="breast">🤱 Pecho</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="feeding-time">Fecha y hora:</label>
+                    <input type="datetime-local" id="feeding-time" required>
+                </div>
+                
+                <div class="form-group" id="amount-group">
+                    <label for="milk-amount">Cantidad (ml):</label>
+                    <div class="quick-amounts">
+                        <button type="button" class="amount-btn" data-amount="60">60ml</button>
+                        <button type="button" class="amount-btn" data-amount="90">90ml</button>
+                        <button type="button" class="amount-btn" data-amount="120">120ml</button>
+                        <button type="button" class="amount-btn" data-amount="150">150ml</button>
+                    </div>
+                    <input type="number" id="milk-amount" min="0" step="1" placeholder="O ingresa cantidad">
+                </div>
+
+                <div class="form-group hidden" id="duration-group">
+                    <label for="feeding-duration">Duración (minutos):</label>
+                    <div class="quick-durations">
+                        <button type="button" class="duration-btn" data-duration="10">10 min</button>
+                        <button type="button" class="duration-btn" data-duration="15">15 min</button>
+                        <button type="button" class="duration-btn" data-duration="20">20 min</button>
+                        <button type="button" class="duration-btn" data-duration="30">30 min</button>
+                    </div>
+                    <input type="number" id="feeding-duration" min="1" step="1" placeholder="O ingresa duración">
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-feeding-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Agregar Registro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Diaper Modal -->
+    <div id="diaper-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🧷 Cambio de Pañal</h2>
+                <button class="modal-close" id="close-diaper-modal">&times;</button>
+            </div>
+            <form id="diaper-form">
+                <div class="form-group">
+                    <label for="diaper-time">Fecha y hora:</label>
+                    <input type="datetime-local" id="diaper-time" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Tipo de cambio:</label>
+                    <div class="diaper-type-selector">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="has-pee" checked>
+                            <span class="checkbox-custom">💧 Pipí</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="has-poop">
+                            <span class="checkbox-custom">💩 Popó</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="diaper-level">Nivel de llenado:</label>
+                    <div class="level-selector">
+                        <button type="button" class="level-btn" data-level="1">Bajo</button>
+                        <button type="button" class="level-btn active" data-level="2">Medio</button>
+                        <button type="button" class="level-btn" data-level="3">Alto</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="diaper-notes">Notas (opcional):</label>
+                    <textarea id="diaper-notes" rows="3" placeholder="Ej: Color, consistencia, etc."></textarea>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-diaper-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Registrar Cambio</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Measurement Modal -->
+    <div id="measurement-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📏 Registrar Medidas</h2>
+                <button class="modal-close" id="close-measurement-modal">&times;</button>
+            </div>
+            <form id="weight-form">
+                <div class="form-group">
+                    <label for="weight-time">Fecha:</label>
+                    <input type="datetime-local" id="weight-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="weight-value">Peso (kg):</label>
+                    <input type="number" id="weight-value" step="0.01" min="0" placeholder="Ej: 3.5">
+                </div>
+                <div class="form-group">
+                    <label for="height-value">Altura (cm):</label>
+                    <input type="number" id="height-value" step="0.1" min="0" placeholder="Ej: 50.5">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-measurement-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Medidas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Medicine Modal -->
+    <div id="medicine-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>💊 Agregar Medicamento</h2>
+                <button class="modal-close" id="close-medicine-modal">&times;</button>
+            </div>
+            <form id="medicine-form">
+                <div class="form-group">
+                    <label for="medicine-name">Nombre del Medicamento:</label>
+                    <select id="medicine-name-select" class="setting-select">
+                        <option value="">Seleccionar medicamento común...</option>
+                        <option value="Paracetamol">Paracetamol</option>
+                        <option value="Ibuprofeno">Ibuprofeno</option>
+                        <option value="Amoxicilina">Amoxicilina</option>
+                        <option value="Probióticos">Probióticos</option>
+                        <option value="Vitamina D">Vitamina D</option>
+                        <option value="Hierro">Hierro</option>
+                        <option value="Salbutamol">Salbutamol</option>
+                        <option value="Dimeticona">Dimeticona</option>
+                        <option value="custom">Otro (escribir)...</option>
+                    </select>
+                    <input type="text" id="medicine-name-custom" style="display: none; margin-top: 0.5rem;" placeholder="Nombre del medicamento">
+                </div>
+                <div class="form-group">
+                    <label for="medicine-dose">Dosis:</label>
+                    <input type="text" id="medicine-dose" required placeholder="Ej: 2.5ml, 1/2 cucharadita">
+                </div>
+                <div class="form-group">
+                    <label for="medicine-time">Fecha y Hora:</label>
+                    <input type="datetime-local" id="medicine-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="medicine-interval">Tipo de Medicamento:</label>
+                    <select id="medicine-type-select" class="setting-select">
+                        <option value="0">Ocasional (sin intervalo)</option>
+                        <option value="4">Cada 4 horas</option>
+                        <option value="6">Cada 6 horas</option>
+                        <option value="8">Cada 8 horas</option>
+                        <option value="12">Cada 12 horas</option>
+                        <option value="24">Cada 24 horas</option>
+                        <option value="custom">Personalizado...</option>
+                    </select>
+                    <input type="number" id="medicine-interval" min="0" step="0.5" style="display: none; margin-top: 0.5rem;" placeholder="Intervalo en horas">
+                </div>
+                <div class="form-group">
+                    <label for="medicine-notes">Notas:</label>
+                    <textarea id="medicine-notes" rows="2" placeholder="Motivo, efectos secundarios, etc."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-medicine-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Medicamento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Temperature Modal -->
+    <div id="temperature-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🌡️ Registro de Temperatura</h2>
+                <button class="modal-close" id="close-temperature-modal">&times;</button>
+            </div>
+            <form id="temperature-form">
+                <div class="form-group">
+                    <label for="temperature-value">Temperatura (°C):</label>
+                    <input type="number" id="temperature-value" step="0.1" min="30" max="45" required placeholder="Ej: 37.5">
+                </div>
+                <div class="form-group">
+                    <label for="temperature-time">Fecha y Hora:</label>
+                    <input type="datetime-local" id="temperature-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="temperature-notes">Notas:</label>
+                    <textarea id="temperature-notes" rows="2" placeholder="Síntomas, contexto, etc."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-temperature-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Registrar Temperatura</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Appointment Modal -->
+    <div id="appointment-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📅 Agregar Cita Médica</h2>
+                <button class="modal-close" id="close-appointment-modal">&times;</button>
+            </div>
+            <form id="appointment-form">
+                <div class="form-group">
+                    <label for="appointment-type">Tipo:</label>
+                    <select id="appointment-type" required>
+                        <option value="doctor">Consulta Médica</option>
+                        <option value="vaccine">Vacuna</option>
+                        <option value="study">Estudio/Análisis</option>
+                        <option value="specialist">Especialista</option>
+                        <option value="other">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="appointment-title">Título:</label>
+                    <input type="text" id="appointment-title" required placeholder="Ej: Control mensual">
+                </div>
+                <div class="form-group">
+                    <label for="appointment-time">Fecha y Hora:</label>
+                    <input type="datetime-local" id="appointment-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="appointment-location">Lugar:</label>
+                    <input type="text" id="appointment-location" placeholder="Ej: Hospital Central">
+                </div>
+                <div class="form-group">
+                    <label for="appointment-notes">Notas:</label>
+                    <textarea id="appointment-notes" rows="2" placeholder="Detalles adicionales"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-appointment-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Agregar Cita</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Journal Modal -->
+    <div id="journal-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📔 Agregar Evento al Diario</h2>
+                <button class="modal-close" id="close-journal-modal">&times;</button>
+            </div>
+            <form id="journal-form">
+                <div class="form-group">
+                    <label for="journal-category">Categoría:</label>
+                    <select id="journal-category" required>
+                        <option value="health">Salud</option>
+                        <option value="behavior">Comportamiento</option>
+                        <option value="milestone">Hito</option>
+                        <option value="concern">Preocupación</option>
+                        <option value="emergency">Emergencia</option>
+                        <option value="other">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="journal-title">Título:</label>
+                    <input type="text" id="journal-title" required placeholder="Ej: Primera sonrisa">
+                </div>
+                <div class="form-group">
+                    <label for="journal-time">Fecha y Hora:</label>
+                    <input type="datetime-local" id="journal-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="journal-description">Descripción:</label>
+                    <textarea id="journal-description" rows="4" required placeholder="Describe el evento en detalle..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="journal-tags">Etiquetas:</label>
+                    <input type="text" id="journal-tags" placeholder="Separadas por comas: fiebre, vómitos, etc.">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-journal-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Evento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Load in order: db, migration, then app -->
     <script src="db.js"></script>
     <script src="migration.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
+

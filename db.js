@@ -4,13 +4,17 @@
  */
 
 const DB_NAME = 'BabyFoodTrackDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 // Object store names
 const STORES = {
     FEEDINGS: 'feedings',
     DIAPERS: 'diapers',
     MEASUREMENTS: 'measurements',
+    MEDICINES: 'medicines',
+    TEMPERATURES: 'temperatures',
+    APPOINTMENTS: 'appointments',
+    JOURNAL: 'journal',
     METADATA: 'metadata'
 };
 
@@ -93,6 +97,54 @@ class BabyFoodDB {
                     measurementStore.createIndex('date', 'date', { unique: false });
                     
                     console.log('Measurements store created');
+                }
+
+                // Create Medicines object store
+                if (!db.objectStoreNames.contains(STORES.MEDICINES)) {
+                    const medicineStore = db.createObjectStore(STORES.MEDICINES, {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+                    medicineStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    medicineStore.createIndex('date', 'date', { unique: false });
+                    medicineStore.createIndex('name', 'name', { unique: false });
+                    medicineStore.createIndex('active', 'active', { unique: false });
+                    console.log('Medicines store created');
+                }
+
+                // Create Temperatures object store
+                if (!db.objectStoreNames.contains(STORES.TEMPERATURES)) {
+                    const temperatureStore = db.createObjectStore(STORES.TEMPERATURES, {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+                    temperatureStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    temperatureStore.createIndex('date', 'date', { unique: false });
+                    console.log('Temperatures store created');
+                }
+
+                // Create Appointments object store
+                if (!db.objectStoreNames.contains(STORES.APPOINTMENTS)) {
+                    const appointmentStore = db.createObjectStore(STORES.APPOINTMENTS, {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+                    appointmentStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    appointmentStore.createIndex('date', 'date', { unique: false });
+                    appointmentStore.createIndex('type', 'type', { unique: false });
+                    console.log('Appointments store created');
+                }
+
+                // Create Journal object store
+                if (!db.objectStoreNames.contains(STORES.JOURNAL)) {
+                    const journalStore = db.createObjectStore(STORES.JOURNAL, {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+                    journalStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    journalStore.createIndex('date', 'date', { unique: false });
+                    journalStore.createIndex('category', 'category', { unique: false });
+                    console.log('Journal store created');
                 }
 
                 // Create Metadata object store (for app settings, migration status, etc.)
@@ -514,6 +566,244 @@ class BabyFoodDB {
         });
     }
 
+    // ============= MEDICINE OPERATIONS =============
+
+    async addMedicine(medicine) {
+        await this.ensureInit();
+        const timestamp = new Date(medicine.time).getTime();
+        const date = new Date(medicine.time).toISOString().split('T')[0];
+        const medicineData = { ...medicine, timestamp, date, createdAt: Date.now() };
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEDICINES], 'readwrite');
+            const store = transaction.objectStore(STORES.MEDICINES);
+            const request = store.add(medicineData);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getMedicines() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEDICINES], 'readonly');
+            const store = transaction.objectStore(STORES.MEDICINES);
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const results = request.result;
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async updateMedicine(id, updates) {
+        await this.ensureInit();
+        return new Promise(async (resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEDICINES], 'readwrite');
+            const store = transaction.objectStore(STORES.MEDICINES);
+            const getRequest = store.get(id);
+            
+            getRequest.onsuccess = () => {
+                const medicine = getRequest.result;
+                if (!medicine) {
+                    reject(new Error(`Medicine with id ${id} not found`));
+                    return;
+                }
+                const updated = { ...medicine, ...updates };
+                const putRequest = store.put(updated);
+                putRequest.onsuccess = () => resolve();
+                putRequest.onerror = () => reject(putRequest.error);
+            };
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+    }
+
+    async deleteMedicine(id) {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEDICINES], 'readwrite');
+            const store = transaction.objectStore(STORES.MEDICINES);
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async clearMedicines() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEDICINES], 'readwrite');
+            const store = transaction.objectStore(STORES.MEDICINES);
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // ============= TEMPERATURE OPERATIONS =============
+
+    async addTemperature(temperature) {
+        await this.ensureInit();
+        const timestamp = new Date(temperature.time).getTime();
+        const date = new Date(temperature.time).toISOString().split('T')[0];
+        const tempData = { ...temperature, timestamp, date, createdAt: Date.now() };
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.TEMPERATURES], 'readwrite');
+            const store = transaction.objectStore(STORES.TEMPERATURES);
+            const request = store.add(tempData);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getTemperatures() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.TEMPERATURES], 'readonly');
+            const store = transaction.objectStore(STORES.TEMPERATURES);
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const results = request.result;
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async deleteTemperature(id) {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.TEMPERATURES], 'readwrite');
+            const store = transaction.objectStore(STORES.TEMPERATURES);
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async clearTemperatures() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.TEMPERATURES], 'readwrite');
+            const store = transaction.objectStore(STORES.TEMPERATURES);
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // ============= APPOINTMENT OPERATIONS =============
+
+    async addAppointment(appointment) {
+        await this.ensureInit();
+        const timestamp = new Date(appointment.time).getTime();
+        const date = new Date(appointment.time).toISOString().split('T')[0];
+        const apptData = { ...appointment, timestamp, date, createdAt: Date.now() };
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.APPOINTMENTS], 'readwrite');
+            const store = transaction.objectStore(STORES.APPOINTMENTS);
+            const request = store.add(apptData);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getAppointments() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.APPOINTMENTS], 'readonly');
+            const store = transaction.objectStore(STORES.APPOINTMENTS);
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const results = request.result;
+                results.sort((a, b) => a.timestamp - b.timestamp); // Future first
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async deleteAppointment(id) {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.APPOINTMENTS], 'readwrite');
+            const store = transaction.objectStore(STORES.APPOINTMENTS);
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async clearAppointments() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.APPOINTMENTS], 'readwrite');
+            const store = transaction.objectStore(STORES.APPOINTMENTS);
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // ============= JOURNAL OPERATIONS =============
+
+    async addJournalEntry(entry) {
+        await this.ensureInit();
+        const timestamp = new Date(entry.time).getTime();
+        const date = new Date(entry.time).toISOString().split('T')[0];
+        const entryData = { ...entry, timestamp, date, createdAt: Date.now() };
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.JOURNAL], 'readwrite');
+            const store = transaction.objectStore(STORES.JOURNAL);
+            const request = store.add(entryData);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getJournalEntries() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.JOURNAL], 'readonly');
+            const store = transaction.objectStore(STORES.JOURNAL);
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const results = request.result;
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async deleteJournalEntry(id) {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.JOURNAL], 'readwrite');
+            const store = transaction.objectStore(STORES.JOURNAL);
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async clearJournalEntries() {
+        await this.ensureInit();
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.JOURNAL], 'readwrite');
+            const store = transaction.objectStore(STORES.JOURNAL);
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
     // ============= METADATA OPERATIONS =============
 
     /**
@@ -565,7 +855,11 @@ class BabyFoodDB {
         await Promise.all([
             this.clearFeedings(),
             this.clearDiapers(),
-            this.clearMeasurements()
+            this.clearMeasurements(),
+            this.clearMedicines(),
+            this.clearTemperatures(),
+            this.clearAppointments(),
+            this.clearJournalEntries()
         ]);
     }
 
