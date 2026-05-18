@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#4a90e2">
     <title>Control de Alimentación del Bebé</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon-192.svg">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -420,12 +424,29 @@
                     <label>Importar / Exportar Datos</label>
                     <div class="setting-actions">
                         <button id="export-csv" class="btn btn-secondary">Exportar CSV</button>
+                        <button id="export-json" class="btn btn-secondary">Exportar JSON</button>
                         <label for="import-csv" class="btn btn-secondary">
                             Importar CSV
                             <input type="file" id="import-csv" accept=".csv" style="display: none;">
                         </label>
                     </div>
                     <p class="setting-description">Exporta o importa tus registros de alimentación en formato CSV</p>
+                </div>
+
+                <div class="setting-item">
+                    <label>Respaldo en Supabase</label>
+                    <div class="setting-actions">
+                        <button id="connect-supabase" class="btn btn-secondary">Conectar</button>
+                        <button id="backup-supabase" class="btn btn-secondary">Respaldar Ahora</button>
+                        <button id="sync-supabase" class="btn btn-secondary">Sincronizar Estado</button>
+                    </div>
+                    <div id="supabase-status" class="storage-status">
+                        <div class="status-indicator">
+                            <span class="status-icon">☁️</span>
+                            <span class="status-text">No configurado</span>
+                        </div>
+                    </div>
+                    <p class="setting-description">Activa respaldo remoto para evitar pérdida de datos por cambio de dispositivo o navegador.</p>
                 </div>
 
                 <div class="setting-item">
@@ -469,6 +490,7 @@
                     <div class="type-selector">
                         <button type="button" class="type-btn active" data-type="bottle">🍼 Biberón</button>
                         <button type="button" class="type-btn" data-type="breast">🤱 Pecho</button>
+                        <button type="button" class="type-btn" data-type="complementary">🥣 Complementaria</button>
                     </div>
                 </div>
 
@@ -497,6 +519,28 @@
                         <button type="button" class="duration-btn" data-duration="30">30 min</button>
                     </div>
                     <input type="number" id="feeding-duration" min="1" step="1" placeholder="O ingresa duración">
+                </div>
+
+                <div class="form-group hidden" id="complementary-group">
+                    <label for="complementary-food">Alimento:</label>
+                    <input type="text" id="complementary-food" placeholder="Ej: Pure de zanahoria">
+
+                    <label for="complementary-grams" style="margin-top: 0.75rem;">Cantidad (g):</label>
+                    <input type="number" id="complementary-grams" min="1" step="1" placeholder="Ej: 35">
+
+                    <label for="complementary-reaction" style="margin-top: 0.75rem;">Reaccion observada:</label>
+                    <select id="complementary-reaction">
+                        <option value="normal">Sin reaccion</option>
+                        <option value="mild">Leve</option>
+                        <option value="moderate">Moderada</option>
+                        <option value="severe">Severa</option>
+                    </select>
+
+                    <label for="complementary-allergens" style="margin-top: 0.75rem;">Alergenos potenciales:</label>
+                    <input type="text" id="complementary-allergens" placeholder="Ej: Huevo, lacteos">
+
+                    <label for="complementary-notes" style="margin-top: 0.75rem;">Notas:</label>
+                    <textarea id="complementary-notes" rows="2" placeholder="Textura, aceptacion, sintomas, etc."></textarea>
                 </div>
                 
                 <div class="modal-actions">
@@ -754,9 +798,12 @@
         </div>
     </div>
 
-    <!-- Load in order: db, migration, then app -->
+    <!-- Load in order: db, migration, supabase, then app -->
     <script src="db.js"></script>
     <script src="migration.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="supabase-sync.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

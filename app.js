@@ -11,7 +11,7 @@ class FeedingTracker {
         this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         this.nextFeedingTimer = null;
         this.nextFeedingCountdownInterval = null;
-        this.currentFeedingType = 'bottle'; // 'bottle' or 'breast'
+        this.currentFeedingType = 'bottle'; // 'bottle', 'breast' or 'complementary'
         this.darkMode = false;
         this.defaultInterval = 3.5; // Default hours between feedings
         this.dailyMilkTarget = 0;
@@ -21,6 +21,8 @@ class FeedingTracker {
         this.currentDiaperLevel = 2; // Default level: medium
         this.useIndexedDB = false; // Will be set after migration check
         this.storageType = 'initializing';
+        this.supabaseSync = null;
+        this.supabaseReady = false;
     }
 
     async init() {
@@ -71,6 +73,8 @@ class FeedingTracker {
         await this.updateGraphs('today');
         this.applyDarkMode();
         this.updateStorageStatus();
+        await this.initializeCloudBackup();
+        this.registerServiceWorker();
     }
 
     // Setup Event Listeners
@@ -320,7 +324,21 @@ class FeedingTracker {
 
         // Export/Import
         document.getElementById('export-csv').addEventListener('click', () => this.exportCSV());
+        document.getElementById('export-json').addEventListener('click', () => this.exportJSON());
         document.getElementById('import-csv').addEventListener('change', (e) => this.importCSV(e));
+
+        // Supabase backup controls
+        document.getElementById('connect-supabase').addEventListener('click', async () => {
+            await this.connectSupabase();
+        });
+
+        document.getElementById('backup-supabase').addEventListener('click', async () => {
+            await this.backupToSupabase('manual_backup');
+        });
+
+        document.getElementById('sync-supabase').addEventListener('click', async () => {
+            await this.syncToSupabase('manual_sync');
+        });
 
         // Statistics filters (also updates graphs now)
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -405,6 +423,8 @@ class FeedingTracker {
             if (confirm('¿Estás seguro de que quieres eliminar TODOS los registros? Esta acción no se puede deshacer.')) {
                 if (confirm('Última confirmación: ¿Realmente quieres borrar todos los datos?')) {
                     try {
+                        await this.backupToSupabase('before_clear_all');
+
                         if (this.useIndexedDB) {
                             await db.clearAllData();
                         }
@@ -432,6 +452,7 @@ class FeedingTracker {
                         this.updateAgeDisplay();
                         alert('Todos los datos han sido eliminados.');
                         this.clearNextFeedingSchedule();
+                        await this.syncToSupabase('after_clear_all');
                     } catch (error) {
                         console.error('Failed to clear data:', error);
                         alert('Error al eliminar los datos.');
@@ -445,15 +466,24 @@ class FeedingTracker {
     toggleFeedingInputs() {
         const amountGroup = document.getElementById('amount-group');
         const durationGroup = document.getElementById('duration-group');
+        const complementaryGroup = document.getElementById('complementary-group');
 
         if (this.currentFeedingType === 'bottle') {
             amountGroup.classList.remove('hidden');
             durationGroup.classList.add('hidden');
+            complementaryGroup.classList.add('hidden');
             document.getElementById('feeding-duration').value = '';
-        } else {
+        } else if (this.currentFeedingType === 'breast') {
             amountGroup.classList.add('hidden');
             durationGroup.classList.remove('hidden');
+            complementaryGroup.classList.add('hidden');
             document.getElementById('milk-amount').value = '';
+        } else {
+            amountGroup.classList.add('hidden');
+            durationGroup.classList.add('hidden');
+            complementaryGroup.classList.remove('hidden');
+            document.getElementById('milk-amount').value = '';
+            document.getElementById('feeding-duration').value = '';
         }
     }
 
@@ -615,13 +645,37 @@ class FeedingTracker {
                 return;
             }
             feeding.amount = amount;
-        } else {
+        } else if (this.currentFeedingType === 'breast') {
             const duration = parseInt(document.getElementById('feeding-duration').value);
             if (!duration || duration <= 0) {
                 alert('Por favor ingresa una duración válida');
                 return;
             }
             feeding.duration = duration;
+        } else {
+            const food = document.getElementById('complementary-food').value.trim();
+            const grams = parseInt(document.getElementById('complementary-grams').value);
+            const reaction = document.getElementById('complementary-reaction').value;
+            const allergensRaw = document.getElementById('complementary-allergens').value.trim();
+            const notes = document.getElementById('complementary-notes').value.trim();
+
+            if (!food) {
+                alert('Por favor ingresa el alimento consumido');
+                return;
+            }
+
+            if (!grams || grams <= 0) {
+                alert('Por favor ingresa una cantidad válida en gramos');
+                return;
+            }
+
+            feeding.food = food;
+            feeding.grams = grams;
+            feeding.reaction = reaction;
+            feeding.allergens = allergensRaw
+                ? allergensRaw.split(',').map(a => a.trim()).filter(Boolean)
+                : [];
+            feeding.notes = notes;
         }
 
         try {
@@ -652,6 +706,11 @@ class FeedingTracker {
             // Clear inputs
             document.getElementById('milk-amount').value = '';
             document.getElementById('feeding-duration').value = '';
+            document.getElementById('complementary-food').value = '';
+            document.getElementById('complementary-grams').value = '';
+            document.getElementById('complementary-reaction').value = 'normal';
+            document.getElementById('complementary-allergens').value = '';
+            document.getElementById('complementary-notes').value = '';
             document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
             document.querySelectorAll('.duration-btn').forEach(b => b.classList.remove('selected'));
             
@@ -712,10 +771,26 @@ class FeedingTracker {
         }
 
         container.innerHTML = this.feedings.map(feeding => {
-            const details = feeding.type === 'bottle' 
-                ? `${feeding.amount} ml` 
-                : `${feeding.duration} min (pecho)`;
-            const icon = feeding.type === 'bottle' ? '🍼' : '🤱';
+            let details = '';
+            let extra = '';
+            let icon = '🍼';
+
+            if (feeding.type === 'bottle') {
+                details = `${feeding.amount} ml`;
+                icon = '🍼';
+            } else if (feeding.type === 'breast') {
+                details = `${feeding.duration} min (pecho)`;
+                icon = '🤱';
+            } else {
+                details = `${feeding.food || 'Alimento'} • ${feeding.grams || 0} g`;
+                icon = '🥣';
+                const allergensText = Array.isArray(feeding.allergens) && feeding.allergens.length > 0
+                    ? ` • Alergenos: ${feeding.allergens.join(', ')}`
+                    : '';
+                const reactionText = feeding.reaction ? `Reaccion: ${this.getReactionLabel(feeding.reaction)}` : '';
+                const notesText = feeding.notes ? `<div class="diaper-notes">${feeding.notes}</div>` : '';
+                extra = `<div class="feeding-next">${reactionText}${allergensText}</div>${notesText}`;
+            }
             const nextFeedingDate = this.getNextFeedingDate(feeding);
             const nextFeedingLabel = nextFeedingDate
                 ? this.formatDateTime(nextFeedingDate.toISOString())
@@ -729,6 +804,7 @@ class FeedingTracker {
                     <div class="feeding-info">
                         <div class="feeding-time">${icon} ${this.formatDateTime(feeding.timestamp)}</div>
                         <div class="feeding-amount">${details}</div>
+                        ${extra}
                         <div class="feeding-next">
                             Próxima aprox: <strong>${nextFeedingLabel}</strong>
                             ${relativeLabel ? `<span class="feeding-next-relative">(${relativeLabel})</span>` : ''}
@@ -1946,6 +2022,7 @@ class FeedingTracker {
             const totalFeedings = filteredFeedings.length;
             const bottleFeedings = filteredFeedings.filter(f => f.type === 'bottle');
             const breastFeedings = filteredFeedings.filter(f => f.type === 'breast');
+            const complementaryFeedings = filteredFeedings.filter(f => f.type === 'complementary');
             
             const totalAmount = bottleFeedings.reduce((sum, f) => sum + (f.amount || 0), 0);
             const avgAmount = bottleFeedings.length > 0 ? Math.round(totalAmount / bottleFeedings.length) : 0;
@@ -1967,6 +2044,10 @@ class FeedingTracker {
                 <div class="stat-card">
                     <div class="stat-label">Pecho</div>
                     <div class="stat-value">${breastFeedings.length}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Complementaria</div>
+                    <div class="stat-value">${complementaryFeedings.length}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Intervalo Promedio</div>
@@ -2010,6 +2091,21 @@ class FeedingTracker {
                     <div class="stat-card">
                         <div class="stat-label">Promedio Pecho</div>
                         <div class="stat-value">${avgDuration} min</div>
+                    </div>
+                `;
+            }
+
+            if (complementaryFeedings.length > 0) {
+                const totalGrams = complementaryFeedings.reduce((sum, f) => sum + (f.grams || 0), 0);
+                const reactions = complementaryFeedings.filter(f => f.reaction && f.reaction !== 'normal').length;
+                statsHTML += `
+                    <div class="stat-card">
+                        <div class="stat-label">Total Complementaria</div>
+                        <div class="stat-value">${totalGrams} g</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Con Reaccion</div>
+                        <div class="stat-value">${reactions}</div>
                     </div>
                 `;
             }
@@ -2438,30 +2534,105 @@ class FeedingTracker {
         ctx.fillText(message, canvas.width / 2, canvas.height / 2);
     }
 
+    csvCell(value) {
+        if (value === null || value === undefined) return '';
+        const stringValue = Array.isArray(value) ? value.join('|') : String(value);
+        return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+
+    getReactionLabel(reaction) {
+        const labels = {
+            normal: 'Sin reaccion',
+            mild: 'Leve',
+            moderate: 'Moderada',
+            severe: 'Severa'
+        };
+        return labels[reaction] || reaction;
+    }
+
+    exportJSON() {
+        const payload = {
+            exportedAt: new Date().toISOString(),
+            timezone: this.timezone,
+            darkMode: this.darkMode,
+            defaultInterval: this.defaultInterval,
+            dailyMilkTarget: this.dailyMilkTarget,
+            birthDate: this.birthDate,
+            notificationsEnabled: this.notificationsEnabled,
+            feedings: this.feedings,
+            diapers: this.diapers,
+            measurements: this.measurements,
+            medicines: this.medicines,
+            temperatures: this.temperatures,
+            appointments: this.appointments,
+            journalEntries: this.journalEntries
+        };
+
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `babyfoodtrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
     exportCSV() {
         const feedingsCSV = this.feedings.map(f => {
-            const type = f.type === 'bottle' ? 'Biberón' : 'Pecho';
+            const type = f.type === 'bottle' ? 'Biberón' : (f.type === 'breast' ? 'Pecho' : 'Complementaria');
             const amount = f.type === 'bottle' ? f.amount : '';
             const duration = f.type === 'breast' ? f.duration : '';
-            return `ALIMENTACION,${f.timestamp},${type},${amount},${duration},,${f.timezone}`;
+            const complementary = f.type === 'complementary'
+                ? `Alimento:${f.food || ''};Gramos:${f.grams || ''};Reaccion:${this.getReactionLabel(f.reaction || 'normal')};Alergenos:${Array.isArray(f.allergens) ? f.allergens.join('|') : ''}`
+                : '';
+            const notes = f.type === 'complementary' ? (f.notes || '') : '';
+            return `ALIMENTACION,${this.csvCell(f.timestamp)},${this.csvCell(type)},${this.csvCell(amount)},${this.csvCell(duration)},${this.csvCell(complementary || notes)},${this.csvCell(f.timezone)}`;
         }).join('\n');
 
         const diapersCSV = this.diapers.map(d => {
             const pee = d.hasPee ? 'Sí' : 'No';
             const poop = d.hasPoop ? 'Sí' : 'No';
-            const notes = d.notes ? `"${d.notes.replace(/"/g, '""')}"` : '';
-            return `PANAL,${d.timestamp},${pee},${poop},${d.level},${notes},${d.timezone}`;
+            return `PANAL,${this.csvCell(d.timestamp)},${this.csvCell(pee)},${this.csvCell(poop)},${this.csvCell(d.level)},${this.csvCell(d.notes || '')},${this.csvCell(d.timezone)}`;
         }).join('\n');
 
         const measurementsCSV = this.measurements.map(m => {
             const weight = m.weight || '';
             const height = m.height || '';
-            return `CRECIMIENTO,${m.timestamp},${weight},${height},,,${m.timezone}`;
+            return `CRECIMIENTO,${this.csvCell(m.timestamp)},${this.csvCell(weight)},${this.csvCell(height)},,,${this.csvCell(m.timezone)}`;
+        }).join('\n');
+
+        const medicinesCSV = this.medicines.map(m => {
+            return `SALUD_MEDICAMENTO,${this.csvCell(m.timestamp)},${this.csvCell(m.name)},${this.csvCell(m.dose)},${this.csvCell(m.interval || 0)},${this.csvCell(m.notes || '')},${this.csvCell(m.timezone)}`;
+        }).join('\n');
+
+        const temperaturesCSV = this.temperatures.map(t => {
+            return `SALUD_TEMPERATURA,${this.csvCell(t.timestamp)},${this.csvCell(t.value)},,,${this.csvCell(t.notes || '')},${this.csvCell(t.timezone)}`;
+        }).join('\n');
+
+        const appointmentsCSV = this.appointments.map(a => {
+            const details = `${a.type || ''} | ${a.title || ''} | ${a.location || ''}`;
+            return `SALUD_CITA,${this.csvCell(a.timestamp)},${this.csvCell(details)},${this.csvCell(a.completed ? 'Completada' : 'Pendiente')},,${this.csvCell(a.notes || '')},${this.csvCell(a.timezone)}`;
+        }).join('\n');
+
+        const journalCSV = this.journalEntries.map(j => {
+            const tags = Array.isArray(j.tags) ? j.tags.join('|') : '';
+            const detail = `${j.category || ''} | ${j.title || ''}`;
+            return `SALUD_DIARIO,${this.csvCell(j.timestamp)},${this.csvCell(detail)},${this.csvCell(tags)},,${this.csvCell(j.description || '')},${this.csvCell(j.timezone)}`;
         }).join('\n');
 
         const csvContent = "data:text/csv;charset=utf-8," + 
             "TIPO,FECHA,DETALLE1,DETALLE2,DETALLE3,NOTAS,ZONA_HORARIA\n" + 
-            feedingsCSV + "\n" + diapersCSV + "\n" + measurementsCSV;
+            [
+                feedingsCSV,
+                diapersCSV,
+                measurementsCSV,
+                medicinesCSV,
+                temperaturesCSV,
+                appointmentsCSV,
+                journalCSV
+            ].filter(Boolean).join('\n');
 
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
@@ -2484,28 +2655,52 @@ class FeedingTracker {
                 const importedFeedings = [];
                 const importedDiapers = [];
                 const importedMeasurements = [];
-                let currentType = null;
 
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
 
-                    const values = line.split(',');
+                    const values = line.split(',').map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+                    const recordType = values[0];
                     
-                    if (line.includes('ALIMENTACION') || currentType === 'feeding') {
-                        currentType = 'feeding';
+                    if (recordType === 'ALIMENTACION') {
+                        let feedingType = 'breast';
+                        if (values[2] === 'Biberón') feedingType = 'bottle';
+                        if (values[2] === 'Complementaria') feedingType = 'complementary';
+
                         const feeding = {
                             time: values[1],
                             timestamp: values[1],
-                            type: values[2] === 'Biberón' ? 'bottle' : 'breast',
+                            type: feedingType,
                             amount: values[3] ? parseInt(values[3]) : null,
                             duration: values[4] ? parseInt(values[4]) : null,
                             timezone: values[6] || values[5] || this.timezone
                         };
+
+                        if (feedingType === 'complementary' && values[5]) {
+                            const detailsMap = {};
+                            values[5].split(';').forEach(part => {
+                                const [k, v] = part.split(':');
+                                if (k && v) detailsMap[k.trim()] = v.trim();
+                            });
+
+                            const reactionMap = {
+                                'Sin reaccion': 'normal',
+                                'Leve': 'mild',
+                                'Moderada': 'moderate',
+                                'Severa': 'severe'
+                            };
+
+                            feeding.food = detailsMap.Alimento || 'Alimento';
+                            feeding.grams = detailsMap.Gramos ? parseInt(detailsMap.Gramos) : null;
+                            feeding.reaction = reactionMap[detailsMap.Reaccion] || 'normal';
+                            feeding.allergens = detailsMap.Alergenos
+                                ? detailsMap.Alergenos.split('|').map(a => a.trim()).filter(Boolean)
+                                : [];
+                        }
                         
                         importedFeedings.push(feeding);
-                    } else if (line.includes('PANAL') || currentType === 'diaper') {
-                        currentType = 'diaper';
+                    } else if (recordType === 'PANAL') {
                         const diaper = {
                             time: values[1],
                             timestamp: values[1],
@@ -2517,8 +2712,7 @@ class FeedingTracker {
                         };
                         
                         importedDiapers.push(diaper);
-                    } else if (line.includes('CRECIMIENTO') || currentType === 'measurement') {
-                        currentType = 'measurement';
+                    } else if (recordType === 'CRECIMIENTO') {
                         const measurement = {
                             time: values[1],
                             timestamp: values[1],
@@ -2571,6 +2765,8 @@ class FeedingTracker {
                     this.updateDiaperTodaySummary();
                     this.updateStats('today');
                     this.updateGraphs('today');
+                    await this.backupToSupabase('import_csv');
+                    await this.syncToSupabase('import_csv');
                     alert('¡Importación exitosa!');
                 }
             } catch (error) {
@@ -2743,6 +2939,84 @@ class FeedingTracker {
             console.error('Failed to load from IndexedDB:', error);
             throw error;
         }
+    }
+
+    registerServiceWorker() {
+        if (!('serviceWorker' in navigator)) return;
+
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('service-worker.js').catch((error) => {
+                console.warn('Service worker registration failed:', error);
+            });
+        });
+    }
+
+    setSupabaseStatus(icon, text) {
+        const statusContainer = document.getElementById('supabase-status');
+        if (!statusContainer) return;
+
+        statusContainer.innerHTML = `
+            <div class="status-indicator">
+                <span class="status-icon">${icon}</span>
+                <span class="status-text">${text}</span>
+            </div>
+        `;
+    }
+
+    async initializeCloudBackup() {
+        if (!window.BabyFoodSupabaseSync || !window.SUPABASE_CONFIG) {
+            this.setSupabaseStatus('☁️', 'Cliente Supabase no cargado');
+            return;
+        }
+
+        this.supabaseSync = new window.BabyFoodSupabaseSync(window.SUPABASE_CONFIG);
+        if (!this.supabaseSync.isConfigured()) {
+            this.setSupabaseStatus('☁️', 'No configurado. Edita supabase-config.js');
+            return;
+        }
+
+        const result = await this.supabaseSync.initialize();
+        if (!result.ok) {
+            this.supabaseReady = false;
+            this.setSupabaseStatus('❌', 'Error al iniciar Supabase');
+            return;
+        }
+
+        this.supabaseReady = true;
+        this.setSupabaseStatus('✅', `Conectado (perfil: ${result.profileId.slice(0, 8)}...)`);
+        this.supabaseSync.startAutoSync(this, 5);
+    }
+
+    async connectSupabase() {
+        await this.initializeCloudBackup();
+        if (this.supabaseReady) {
+            await this.backupToSupabase('connect_button');
+            await this.syncToSupabase('connect_button');
+        }
+    }
+
+    async backupToSupabase(reason = 'manual') {
+        if (!this.supabaseReady || !this.supabaseSync) return;
+
+        const result = await this.supabaseSync.backupSnapshot(this, reason);
+        if (!result.ok) {
+            this.setSupabaseStatus('⚠️', 'Conectado, pero fallo el backup');
+            return;
+        }
+
+        this.setSupabaseStatus('✅', 'Backup remoto completado');
+    }
+
+    async syncToSupabase(reason = 'manual') {
+        if (!this.supabaseReady || !this.supabaseSync) return;
+
+        const result = await this.supabaseSync.syncCurrentState(this, reason);
+        if (!result.ok) {
+            this.setSupabaseStatus('⚠️', 'Conectado, pero fallo la sincronizacion');
+            return;
+        }
+
+        this.setSupabaseStatus('✅', `Sincronizado: ${new Date(result.lastSyncAt).toLocaleTimeString()}`);
     }
 
     loadFromLocalStorage() {
