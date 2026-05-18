@@ -23,6 +23,13 @@ class FeedingTracker {
         this.storageType = 'initializing';
         this.supabaseSync = null;
         this.supabaseReady = false;
+        this.complementaryCatalog = [
+            'Pure de zanahoria',
+            'Pure de calabaza',
+            'Banana',
+            'Palta',
+            'Avena'
+        ];
     }
 
     async init() {
@@ -49,6 +56,8 @@ class FeedingTracker {
         }
 
         this.setupEventListeners();
+        this.renderComplementaryCatalog();
+        this.populateComplementaryFoodSelect();
         this.populateTimezones();
         this.setDefaultDateTime();
         this.setDefaultDiaperTime();
@@ -326,6 +335,25 @@ class FeedingTracker {
         document.getElementById('export-csv').addEventListener('click', () => this.exportCSV());
         document.getElementById('export-json').addEventListener('click', () => this.exportJSON());
         document.getElementById('import-csv').addEventListener('change', (e) => this.importCSV(e));
+        document.getElementById('import-json').addEventListener('change', (e) => this.importJSON(e));
+
+        // Complementary food catalog
+        document.getElementById('add-catalog-food').addEventListener('click', async () => {
+            await this.addCatalogFood();
+        });
+
+        document.getElementById('catalog-food-input').addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                await this.addCatalogFood();
+            }
+        });
+
+        document.getElementById('complementary-food-select').addEventListener('change', (e) => {
+            if (e.target.value) {
+                document.getElementById('complementary-food').value = e.target.value;
+            }
+        });
 
         // Supabase backup controls
         document.getElementById('connect-supabase').addEventListener('click', async () => {
@@ -485,6 +513,75 @@ class FeedingTracker {
             document.getElementById('milk-amount').value = '';
             document.getElementById('feeding-duration').value = '';
         }
+    }
+
+    normalizeCatalogFoodName(value) {
+        return (value || '').trim().replace(/\s+/g, ' ');
+    }
+
+    populateComplementaryFoodSelect() {
+        const select = document.getElementById('complementary-food-select');
+        if (!select) return;
+
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Seleccionar del catalogo...</option>';
+
+        this.complementaryCatalog.forEach(food => {
+            const option = document.createElement('option');
+            option.value = food;
+            option.textContent = food;
+            select.appendChild(option);
+        });
+
+        if (currentValue && this.complementaryCatalog.includes(currentValue)) {
+            select.value = currentValue;
+        }
+    }
+
+    renderComplementaryCatalog() {
+        const container = document.getElementById('catalog-food-list');
+        if (!container) return;
+
+        if (this.complementaryCatalog.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No hay alimentos cargados</p></div>';
+            this.populateComplementaryFoodSelect();
+            return;
+        }
+
+        container.innerHTML = this.complementaryCatalog.map(food => `
+            <span class="catalog-item">
+                ${food}
+                <button class="catalog-remove" type="button" onclick="tracker.removeCatalogFood('${food.replace(/'/g, "\\'")}')">×</button>
+            </span>
+        `).join('');
+
+        this.populateComplementaryFoodSelect();
+    }
+
+    async addCatalogFood() {
+        const input = document.getElementById('catalog-food-input');
+        if (!input) return;
+
+        const normalized = this.normalizeCatalogFoodName(input.value);
+        if (!normalized) return;
+
+        const exists = this.complementaryCatalog.some(f => f.toLowerCase() === normalized.toLowerCase());
+        if (exists) {
+            input.value = '';
+            return;
+        }
+
+        this.complementaryCatalog.push(normalized);
+        this.complementaryCatalog.sort((a, b) => a.localeCompare(b, 'es'));
+        input.value = '';
+        this.renderComplementaryCatalog();
+        await this.saveToStorage();
+    }
+
+    async removeCatalogFood(foodToRemove) {
+        this.complementaryCatalog = this.complementaryCatalog.filter(food => food !== foodToRemove);
+        this.renderComplementaryCatalog();
+        await this.saveToStorage();
     }
 
     // Storage Status
@@ -1068,6 +1165,7 @@ class FeedingTracker {
     openFeedingModal() {
         const modal = document.getElementById('feeding-modal');
         modal.classList.add('active');
+        this.populateComplementaryFoodSelect();
         this.setDefaultDateTime();
     }
 
@@ -2559,6 +2657,7 @@ class FeedingTracker {
             dailyMilkTarget: this.dailyMilkTarget,
             birthDate: this.birthDate,
             notificationsEnabled: this.notificationsEnabled,
+            complementaryCatalog: this.complementaryCatalog,
             feedings: this.feedings,
             diapers: this.diapers,
             measurements: this.measurements,
@@ -2643,6 +2742,38 @@ class FeedingTracker {
         document.body.removeChild(link);
     }
 
+    parseCsvLine(line) {
+        const values = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const next = line[i + 1];
+
+            if (char === '"') {
+                if (inQuotes && next === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+                continue;
+            }
+
+            if (char === ',' && !inQuotes) {
+                values.push(current);
+                current = '';
+                continue;
+            }
+
+            current += char;
+        }
+
+        values.push(current);
+        return values;
+    }
+
     importCSV(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -2655,12 +2786,16 @@ class FeedingTracker {
                 const importedFeedings = [];
                 const importedDiapers = [];
                 const importedMeasurements = [];
+                const importedMedicines = [];
+                const importedTemperatures = [];
+                const importedAppointments = [];
+                const importedJournalEntries = [];
 
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
 
-                    const values = line.split(',').map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+                    const values = this.parseCsvLine(line);
                     const recordType = values[0];
                     
                     if (recordType === 'ALIMENTACION') {
@@ -2721,31 +2856,89 @@ class FeedingTracker {
                             timezone: values[6] || values[5] || this.timezone
                         };
                         importedMeasurements.push(measurement);
+                    } else if (recordType === 'SALUD_MEDICAMENTO') {
+                        const interval = values[4] ? parseFloat(values[4]) : 0;
+                        const medicine = {
+                            time: values[1],
+                            timestamp: values[1],
+                            name: values[2] || 'Medicamento',
+                            dose: values[3] || '',
+                            interval: interval || 0,
+                            notes: values[5] || '',
+                            active: interval > 0,
+                            nextDose: interval > 0
+                                ? new Date(new Date(values[1]).getTime() + interval * 60 * 60 * 1000).toISOString()
+                                : null,
+                            timezone: values[6] || this.timezone
+                        };
+                        importedMedicines.push(medicine);
+                    } else if (recordType === 'SALUD_TEMPERATURA') {
+                        const temperature = {
+                            time: values[1],
+                            timestamp: values[1],
+                            value: values[2] ? parseFloat(values[2]) : null,
+                            notes: values[5] || '',
+                            timezone: values[6] || this.timezone
+                        };
+                        if (temperature.value) importedTemperatures.push(temperature);
+                    } else if (recordType === 'SALUD_CITA') {
+                        const detailParts = (values[2] || '').split('|').map(s => s.trim());
+                        const appointment = {
+                            time: values[1],
+                            timestamp: values[1],
+                            type: detailParts[0] || 'other',
+                            title: detailParts[1] || 'Cita médica',
+                            location: detailParts[2] || '',
+                            completed: (values[3] || '').toLowerCase().includes('completada'),
+                            notes: values[5] || '',
+                            timezone: values[6] || this.timezone
+                        };
+                        importedAppointments.push(appointment);
+                    } else if (recordType === 'SALUD_DIARIO') {
+                        const detailParts = (values[2] || '').split('|').map(s => s.trim());
+                        const journalEntry = {
+                            time: values[1],
+                            timestamp: values[1],
+                            category: detailParts[0] || 'other',
+                            title: detailParts[1] || 'Evento',
+                            tags: values[3] ? values[3].split('|').map(t => t.trim()).filter(Boolean) : [],
+                            description: values[5] || '',
+                            timezone: values[6] || this.timezone
+                        };
+                        importedJournalEntries.push(journalEntry);
                     }
                 }
 
-                const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length;
+                const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length + importedMedicines.length + importedTemperatures.length + importedAppointments.length + importedJournalEntries.length;
                 if (totalImported === 0) {
                     alert('No se encontraron datos válidos en el archivo');
                     return;
                 }
 
-                if (confirm(`¿Importar ${importedFeedings.length} alimentaciones, ${importedDiapers.length} pañales y ${importedMeasurements.length} mediciones? Esto se agregará a los datos existentes.`)) {
+                if (confirm(`¿Importar ${importedFeedings.length} alimentaciones, ${importedDiapers.length} pañales, ${importedMeasurements.length} mediciones, ${importedMedicines.length} medicamentos, ${importedTemperatures.length} temperaturas, ${importedAppointments.length} citas y ${importedJournalEntries.length} eventos? Esto se agregará a los datos existentes.`)) {
                     
                     if (this.useIndexedDB) {
                         // Save to IndexedDB
                         for (const f of importedFeedings) await db.addFeeding(f);
                         for (const d of importedDiapers) await db.addDiaper(d);
                         for (const m of importedMeasurements) await db.addMeasurement(m);
+                        for (const m of importedMedicines) await db.addMedicine(m);
+                        for (const t of importedTemperatures) await db.addTemperature(t);
+                        for (const a of importedAppointments) await db.addAppointment(a);
+                        for (const j of importedJournalEntries) await db.addJournalEntry(j);
                         
                         // Reload data
-                        await this.loadData();
+                        await this.loadFromStorage();
                     } else {
                         // Save to LocalStorage
                         // Assign IDs for local storage
                         importedFeedings.forEach((f, idx) => f.id = Date.now() + idx);
                         importedDiapers.forEach((d, idx) => d.id = Date.now() + idx + 10000);
                         importedMeasurements.forEach((m, idx) => m.id = Date.now() + idx + 20000);
+                        importedMedicines.forEach((m, idx) => m.id = Date.now() + idx + 30000);
+                        importedTemperatures.forEach((t, idx) => t.id = Date.now() + idx + 40000);
+                        importedAppointments.forEach((a, idx) => a.id = Date.now() + idx + 50000);
+                        importedJournalEntries.forEach((j, idx) => j.id = Date.now() + idx + 60000);
 
                         this.feedings = [...importedFeedings, ...this.feedings];
                         this.feedings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -2755,16 +2948,23 @@ class FeedingTracker {
 
                         this.measurements = [...importedMeasurements, ...this.measurements];
                         this.measurements.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                        this.medicines = [...importedMedicines, ...this.medicines];
+                        this.medicines.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                        this.temperatures = [...importedTemperatures, ...this.temperatures];
+                        this.temperatures.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                        this.appointments = [...importedAppointments, ...this.appointments];
+                        this.appointments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+                        this.journalEntries = [...importedJournalEntries, ...this.journalEntries];
+                        this.journalEntries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                         
                         this.saveToLocalStorage();
                     }
 
-                    this.renderFeedingList();
-                    this.renderDiaperList();
-                    this.renderMeasurementList();
-                    this.updateDiaperTodaySummary();
-                    this.updateStats('today');
-                    this.updateGraphs('today');
+                    await this.refreshAllViewsAfterImport();
                     await this.backupToSupabase('import_csv');
                     await this.syncToSupabase('import_csv');
                     alert('¡Importación exitosa!');
@@ -2780,6 +2980,208 @@ class FeedingTracker {
         event.target.value = '';
     }
 
+    async refreshAllViewsAfterImport() {
+        await this.renderFeedingList();
+        await this.renderDiaperList();
+        await this.renderMeasurementList();
+        await this.renderMedicineList();
+        await this.renderTemperatureList();
+        await this.renderAppointmentList();
+        await this.renderJournalList();
+        this.renderTemperatureChart();
+        await this.updateDiaperTodaySummary();
+        await this.updateStats('today');
+        await this.updateGraphs('today');
+    }
+
+    importJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const payload = JSON.parse(e.target.result);
+
+                const importedFeedings = Array.isArray(payload.feedings) ? payload.feedings : [];
+                const importedDiapers = Array.isArray(payload.diapers) ? payload.diapers : [];
+                const importedMeasurements = Array.isArray(payload.measurements) ? payload.measurements : [];
+                const importedMedicines = Array.isArray(payload.medicines) ? payload.medicines : [];
+                const importedTemperatures = Array.isArray(payload.temperatures) ? payload.temperatures : [];
+                const importedAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
+                const importedJournalEntries = Array.isArray(payload.journalEntries) ? payload.journalEntries : [];
+                const importedCatalog = Array.isArray(payload.complementaryCatalog) ? payload.complementaryCatalog : [];
+
+                const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length + importedMedicines.length + importedTemperatures.length + importedAppointments.length + importedJournalEntries.length;
+                if (totalImported === 0) {
+                    alert('No se encontraron datos validos en el archivo JSON');
+                    return;
+                }
+
+                if (!confirm(`¿Importar respaldo JSON con ${totalImported} registros? Se agregara a los datos existentes.`)) {
+                    return;
+                }
+
+                if (this.useIndexedDB) {
+                    for (const f of importedFeedings) {
+                        await db.addFeeding({
+                            time: f.time || f.timestamp,
+                            type: f.type,
+                            amount: f.amount,
+                            duration: f.duration,
+                            food: f.food,
+                            grams: f.grams,
+                            reaction: f.reaction,
+                            allergens: f.allergens,
+                            notes: f.notes,
+                            nextFeedingInterval: f.nextFeedingInterval || this.defaultInterval,
+                            timezone: f.timezone || this.timezone
+                        });
+                    }
+
+                    for (const d of importedDiapers) {
+                        await db.addDiaper({
+                            time: d.time || d.timestamp,
+                            hasPee: Boolean(d.hasPee),
+                            hasPoop: Boolean(d.hasPoop),
+                            level: d.level || 2,
+                            notes: d.notes || '',
+                            timezone: d.timezone || this.timezone
+                        });
+                    }
+
+                    for (const m of importedMeasurements) {
+                        await db.addMeasurement({
+                            time: m.time || m.timestamp,
+                            weight: m.weight || null,
+                            height: m.height || null,
+                            timezone: m.timezone || this.timezone
+                        });
+                    }
+
+                    for (const m of importedMedicines) {
+                        await db.addMedicine({
+                            time: m.time || m.timestamp,
+                            name: m.name || 'Medicamento',
+                            dose: m.dose || '',
+                            interval: m.interval || 0,
+                            notes: m.notes || '',
+                            active: m.active !== false,
+                            nextDose: m.nextDose || null,
+                            timezone: m.timezone || this.timezone
+                        });
+                    }
+
+                    for (const t of importedTemperatures) {
+                        if (!t.value) continue;
+                        await db.addTemperature({
+                            time: t.time || t.timestamp,
+                            value: t.value,
+                            notes: t.notes || '',
+                            timezone: t.timezone || this.timezone
+                        });
+                    }
+
+                    for (const a of importedAppointments) {
+                        await db.addAppointment({
+                            time: a.time || a.timestamp,
+                            type: a.type || 'other',
+                            title: a.title || 'Cita médica',
+                            location: a.location || '',
+                            notes: a.notes || '',
+                            completed: Boolean(a.completed),
+                            timezone: a.timezone || this.timezone
+                        });
+                    }
+
+                    for (const j of importedJournalEntries) {
+                        await db.addJournalEntry({
+                            time: j.time || j.timestamp,
+                            category: j.category || 'other',
+                            title: j.title || 'Evento',
+                            description: j.description || '',
+                            tags: Array.isArray(j.tags) ? j.tags : [],
+                            timezone: j.timezone || this.timezone
+                        });
+                    }
+
+                    if (importedCatalog.length > 0) {
+                        const mergedCatalog = [...new Set([...this.complementaryCatalog, ...importedCatalog.map(i => this.normalizeCatalogFoodName(i)).filter(Boolean)])];
+                        this.complementaryCatalog = mergedCatalog.sort((a, b) => a.localeCompare(b, 'es'));
+                        await db.setMetadata('complementaryCatalog', this.complementaryCatalog);
+                    }
+
+                    await this.loadFromStorage();
+                } else {
+                    importedFeedings.forEach((f, idx) => {
+                        f.id = Date.now() + idx;
+                        f.timestamp = f.timestamp || f.time;
+                    });
+                    importedDiapers.forEach((d, idx) => {
+                        d.id = Date.now() + idx + 10000;
+                        d.timestamp = d.timestamp || d.time;
+                    });
+                    importedMeasurements.forEach((m, idx) => {
+                        m.id = Date.now() + idx + 20000;
+                        m.timestamp = m.timestamp || m.time;
+                    });
+                    importedMedicines.forEach((m, idx) => {
+                        m.id = Date.now() + idx + 30000;
+                        m.timestamp = m.timestamp || m.time;
+                    });
+                    importedTemperatures.forEach((t, idx) => {
+                        t.id = Date.now() + idx + 40000;
+                        t.timestamp = t.timestamp || t.time;
+                    });
+                    importedAppointments.forEach((a, idx) => {
+                        a.id = Date.now() + idx + 50000;
+                        a.timestamp = a.timestamp || a.time;
+                    });
+                    importedJournalEntries.forEach((j, idx) => {
+                        j.id = Date.now() + idx + 60000;
+                        j.timestamp = j.timestamp || j.time;
+                    });
+
+                    this.feedings = [...importedFeedings, ...this.feedings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    this.diapers = [...importedDiapers, ...this.diapers].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    this.measurements = [...importedMeasurements, ...this.measurements].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    this.medicines = [...importedMedicines, ...this.medicines].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    this.temperatures = [...importedTemperatures, ...this.temperatures].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    this.appointments = [...importedAppointments, ...this.appointments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                    this.journalEntries = [...importedJournalEntries, ...this.journalEntries].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                    if (importedCatalog.length > 0) {
+                        const mergedCatalog = [...new Set([...this.complementaryCatalog, ...importedCatalog.map(i => this.normalizeCatalogFoodName(i)).filter(Boolean)])];
+                        this.complementaryCatalog = mergedCatalog.sort((a, b) => a.localeCompare(b, 'es'));
+                    }
+
+                    if (payload.timezone) this.timezone = payload.timezone;
+                    if (typeof payload.darkMode === 'boolean') this.darkMode = payload.darkMode;
+                    if (typeof payload.defaultInterval === 'number') this.defaultInterval = payload.defaultInterval;
+                    if (typeof payload.dailyMilkTarget === 'number') this.dailyMilkTarget = payload.dailyMilkTarget;
+                    if (payload.birthDate) this.birthDate = payload.birthDate;
+                    if (typeof payload.notificationsEnabled === 'boolean') this.notificationsEnabled = payload.notificationsEnabled;
+
+                    this.saveToLocalStorage();
+                }
+
+                await this.refreshAllViewsAfterImport();
+                this.renderComplementaryCatalog();
+                this.populateComplementaryFoodSelect();
+                this.applyDarkMode();
+                await this.backupToSupabase('import_json');
+                await this.syncToSupabase('import_json');
+                alert('¡Importación JSON exitosa!');
+            } catch (error) {
+                console.error(error);
+                alert('Error al importar JSON: ' + error.message);
+            }
+        };
+
+        reader.readAsText(file);
+        event.target.value = '';
+    }
+
     // Storage Management (supports both IndexedDB and localStorage)
     async saveToStorage() {
         if (this.useIndexedDB) {
@@ -2790,6 +3192,7 @@ class FeedingTracker {
             await db.setMetadata('dailyMilkTarget', this.dailyMilkTarget);
             await db.setMetadata('birthDate', this.birthDate);
             await db.setMetadata('notificationsEnabled', this.notificationsEnabled);
+            await db.setMetadata('complementaryCatalog', this.complementaryCatalog);
         } else {
             // Fallback to localStorage
             this.saveToLocalStorage();
@@ -2810,6 +3213,7 @@ class FeedingTracker {
         localStorage.setItem('dailyMilkTarget', this.dailyMilkTarget.toString());
         if (this.birthDate) localStorage.setItem('birthDate', this.birthDate);
         localStorage.setItem('notificationsEnabled', JSON.stringify(this.notificationsEnabled));
+        localStorage.setItem('complementaryCatalog', JSON.stringify(this.complementaryCatalog));
     }
 
     // Load from IndexedDB
@@ -2823,6 +3227,11 @@ class FeedingTracker {
                 type: f.type,
                 amount: f.amount,
                 duration: f.duration,
+                food: f.food,
+                grams: f.grams,
+                reaction: f.reaction,
+                allergens: f.allergens,
+                notes: f.notes,
                 nextFeedingInterval: f.nextFeedingInterval,
                 timezone: f.timezone
             }));
@@ -2933,6 +3342,13 @@ class FeedingTracker {
                 if (notifToggle) notifToggle.checked = this.notificationsEnabled;
                 if (this.notificationsEnabled) this.startNotificationScheduler();
             }
+
+            const complementaryCatalog = await db.getMetadata('complementaryCatalog');
+            if (Array.isArray(complementaryCatalog) && complementaryCatalog.length > 0) {
+                this.complementaryCatalog = complementaryCatalog;
+            }
+
+            this.renderComplementaryCatalog();
 
             console.log(`📊 Loaded ${this.feedings.length} feedings, ${this.diapers.length} diapers, ${this.measurements.length} measurements, ${this.medicines.length} medicines, ${this.temperatures.length} temperatures, ${this.appointments.length} appointments, and ${this.journalEntries.length} journal entries`);
         } catch (error) {
@@ -3093,6 +3509,20 @@ class FeedingTracker {
             if (notifToggle) notifToggle.checked = this.notificationsEnabled;
             if (this.notificationsEnabled) this.startNotificationScheduler();
         }
+
+        const complementaryCatalog = localStorage.getItem('complementaryCatalog');
+        if (complementaryCatalog) {
+            try {
+                const parsed = JSON.parse(complementaryCatalog);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.complementaryCatalog = parsed;
+                }
+            } catch (error) {
+                console.warn('Failed to parse complementary catalog from localStorage:', error);
+            }
+        }
+
+        this.renderComplementaryCatalog();
     }
 
     // ============= ANALYTICS FUNCTIONS =============

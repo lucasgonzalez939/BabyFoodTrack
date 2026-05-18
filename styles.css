@@ -224,6 +224,9 @@ section h3 {
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
+    white-space: normal;
+    line-height: 1.2;
+    word-break: break-word;
 }
 
 body.dark-mode .type-btn {
@@ -256,6 +259,13 @@ body.dark-mode .type-btn {
     background-color: var(--primary-color);
     color: white;
     border-color: var(--primary-color);
+}
+
+@media (max-width: 480px) {
+    .type-btn {
+        font-size: 0.92rem;
+        padding: 0.75rem 0.5rem;
+    }
 }
 
 /* Quick Amount/Duration Buttons */
@@ -531,6 +541,33 @@ textarea:focus {
 }
 
 .btn-secondary:hover {
+
+.catalog-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.catalog-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(74, 144, 226, 0.12);
+    color: var(--text-primary);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.9rem;
+}
+
+.catalog-remove {
+    border: none;
+    background: transparent;
+    color: var(--danger-color);
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+}
     background-color: #45b369;
     box-shadow: var(--shadow-hover);
 }

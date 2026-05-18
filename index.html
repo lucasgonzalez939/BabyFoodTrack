@@ -429,8 +429,12 @@
                             Importar CSV
                             <input type="file" id="import-csv" accept=".csv" style="display: none;">
                         </label>
+                        <label for="import-json" class="btn btn-secondary">
+                            Importar JSON
+                            <input type="file" id="import-json" accept=".json,application/json" style="display: none;">
+                        </label>
                     </div>
-                    <p class="setting-description">Exporta o importa tus registros de alimentación en formato CSV</p>
+                    <p class="setting-description">Exporta o importa tus registros en CSV o en respaldo JSON completo.</p>
                 </div>
 
                 <div class="setting-item">
@@ -447,6 +451,16 @@
                         </div>
                     </div>
                     <p class="setting-description">Activa respaldo remoto para evitar pérdida de datos por cambio de dispositivo o navegador.</p>
+                </div>
+
+                <div class="setting-item">
+                    <label>Catalogo de Alimentacion Complementaria</label>
+                    <div class="setting-actions">
+                        <input type="text" id="catalog-food-input" class="setting-input" placeholder="Ej: Pure de calabaza" style="margin-bottom: 0;">
+                        <button id="add-catalog-food" class="btn btn-secondary">Agregar</button>
+                    </div>
+                    <div id="catalog-food-list" class="catalog-list"></div>
+                    <p class="setting-description">Administra tus alimentos frecuentes para cargarlos rapido en el formulario.</p>
                 </div>
 
                 <div class="setting-item">
@@ -522,6 +536,11 @@
                 </div>
 
                 <div class="form-group hidden" id="complementary-group">
+                    <label for="complementary-food-select">Alimento frecuente:</label>
+                    <select id="complementary-food-select">
+                        <option value="">Seleccionar del catalogo...</option>
+                    </select>
+
                     <label for="complementary-food">Alimento:</label>
                     <input type="text" id="complementary-food" placeholder="Ej: Pure de zanahoria">
 
