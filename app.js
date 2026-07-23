@@ -17,6 +17,12 @@ class FeedingTracker {
         this.dailyMilkTarget = 0;
         this.birthDate = null;
         this.notificationsEnabled = false;
+        // Baby temperature thresholds in Celsius.
+        // Update these values if medical guidance changes.
+        this.temperatureThresholds = {
+            feverC: 37.5,
+            highFeverC: 38.5
+        };
         this.notificationCheckInterval = null;
         this.currentDiaperLevel = 2; // Default level: medium
         this.useIndexedDB = false; // Will be set after migration check
@@ -1498,7 +1504,7 @@ class FeedingTracker {
             document.getElementById('temperature-value').value = '';
             document.getElementById('temperature-notes').value = '';
             
-            const alert_msg = value >= 38 ? ' ⚠️ Fiebre detectada' : '';
+            const alert_msg = value >= this.temperatureThresholds.feverC ? ' ⚠️ Fiebre detectada' : '';
             this.sendNotification('Temperatura registrada', `${value}°C${alert_msg}`);
         } catch (error) {
             console.error('Failed to add temperature:', error);
@@ -1531,14 +1537,15 @@ class FeedingTracker {
         }
 
         container.innerHTML = this.temperatures.map(t => {
-            const isFever = t.value >= 38;
+            const isFever = t.value >= this.temperatureThresholds.feverC;
+            const isHighFever = t.value >= this.temperatureThresholds.highFeverC;
             return `
                 <div class="feeding-item ${isFever ? 'temperature-fever' : ''}">
                     <div class="feeding-info">
                         <div class="feeding-time">🌡️ ${this.formatDateTime(t.timestamp)}</div>
                         <div class="feeding-amount">
                             <strong>${t.value}°C</strong>
-                            ${isFever ? ' ⚠️ Fiebre' : t.value >= 37.5 ? ' ⚡ Elevada' : ' ✓ Normal'}
+                            ${isHighFever ? ' ⚠️ Fiebre alta' : isFever ? ' ⚠️ Fiebre' : ' ✓ Normal'}
                         </div>
                         ${t.notes ? `<div class="diaper-notes">${t.notes}</div>` : ''}
                     </div>
@@ -3675,7 +3682,7 @@ class FeedingTracker {
                     avg: temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : 0,
                     max: temps.length > 0 ? Math.max(...temps).toFixed(1) : 0,
                     min: temps.length > 0 ? Math.min(...temps).toFixed(1) : 0,
-                    feverCount: data.filter(t => t.value >= 38).length,
+                    feverCount: data.filter(t => t.value >= this.temperatureThresholds.feverC).length,
                     data: data.map(t => ({ date: new Date(t.timestamp), value: t.value }))
                 };
                 
@@ -4105,10 +4112,10 @@ class FeedingTracker {
             if (d.feverCount > 0) {
                 insights.push({
                     type: 'warning',
-                    text: `Se registraron ${d.feverCount} episodios de fiebre (≥38°C) en ${daysRange} días. Temperatura máxima: ${d.max}°C.`
+                    text: `Se registraron ${d.feverCount} episodios de fiebre (≥${this.temperatureThresholds.feverC}°C) en ${daysRange} días. Temperatura máxima: ${d.max}°C.`
                 });
             }
-            if (parseFloat(d.avg) <= 37.5) {
+            if (parseFloat(d.avg) < this.temperatureThresholds.feverC) {
                 insights.push({
                     type: 'positive',
                     text: `Temperatura promedio normal: ${d.avg}°C.`

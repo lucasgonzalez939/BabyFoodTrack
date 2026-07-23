@@ -216,6 +216,8 @@ section h3 {
 .type-btn {
     padding: 1rem;
     min-height: var(--touch-size);
+    min-width: 0;
+    max-width: 100%;
     border: 2px solid var(--border-color);
     background: white;
     border-radius: 8px;
@@ -226,7 +228,8 @@ section h3 {
     position: relative;
     white-space: normal;
     line-height: 1.2;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: anywhere;
 }
 
 body.dark-mode .type-btn {
@@ -262,7 +265,15 @@ body.dark-mode .type-btn {
 }
 
 @media (max-width: 480px) {
-    .type-btn {
+    #feeding-form .type-selector {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #feeding-form .type-selector .type-btn[data-type="complementary"] {
+        grid-column: 1 / -1;
+    }
+
+    #feeding-form .type-selector .type-btn {
         font-size: 0.92rem;
         padding: 0.75rem 0.5rem;
     }
