@@ -1553,3 +1553,80 @@ body.dark-mode .journal-emergency {
     }
 }
 
+/* ============= Sync Status Badge ============= */
+.sync-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+    line-height: 1;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.sync-offline {
+    background: var(--background);
+    color: var(--text-secondary);
+}
+
+.sync-loading {
+    background: #e3f2fd;
+    color: #1565c0;
+    animation: syncPulse 1.5s ease-in-out infinite;
+}
+
+.sync-ok {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.sync-error {
+    background: #ffebee;
+    color: #c62828;
+}
+
+body.dark-mode .sync-offline {
+    background: #2a2a2a;
+    color: #888;
+}
+
+body.dark-mode .sync-loading {
+    background: #1a237e;
+    color: #90caf9;
+}
+
+body.dark-mode .sync-ok {
+    background: #1b5e20;
+    color: #a5d6a7;
+}
+
+body.dark-mode .sync-error {
+    background: #b71c1c;
+    color: #ffcdd2;
+}
+
+@keyframes syncPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ============= Share Code Display ============= */
+.share-code-display {
+    background: var(--background);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* ============= Utility ============= */
+.hidden {
+    display: none !important;
+}
+

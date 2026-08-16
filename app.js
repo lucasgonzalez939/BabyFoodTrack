@@ -27,8 +27,15 @@ class FeedingTracker {
         this.currentDiaperLevel = 2; // Default level: medium
         this.useIndexedDB = false; // Will be set after migration check
         this.storageType = 'initializing';
-        this.supabaseSync = null;
-        this.supabaseReady = false;
+        // Sync state
+        this.currentProfileId = null;
+        this.currentBabyId = null;
+        this.syncReady = false;
+        this.realtimeChannel = null;
+        this.pendingSyncRecords = new Map();
+        this.pendingDeletes = [];
+        this.syncTimeout = null;
+        this.isSyncing = false;
         this.complementaryCatalog = [
             'Pure de zanahoria',
             'Pure de calabaza',
@@ -50,6 +57,16 @@ class FeedingTracker {
             
             if (migrationResult.status === 'success') {
                 console.log(`📦 Migrated ${migrationResult.feedings} feedings and ${migrationResult.diapers} diapers`);
+            }
+
+            // After a successful init (including any V4 upgrade), take a clean
+            // post-upgrade snapshot and retire the pre-upgrade one. This gives
+            // the user a rollback point that reflects the current, migrated state.
+            try {
+                await db.snapshotAllData();           // saves 'bft_idb_snapshot'
+                localStorage.removeItem('bft_pre_v4_snapshot'); // retire old one
+            } catch (snapErr) {
+                console.warn('Post-init snapshot failed (non-fatal):', snapErr);
             }
             
             await this.loadFromStorage();
@@ -88,7 +105,7 @@ class FeedingTracker {
         await this.updateGraphs('today');
         this.applyDarkMode();
         this.updateStorageStatus();
-        await this.initializeCloudBackup();
+        await this.initSync();
         this.registerServiceWorker();
     }
 
@@ -361,18 +378,27 @@ class FeedingTracker {
             }
         });
 
-        // Supabase backup controls
-        document.getElementById('connect-supabase').addEventListener('click', async () => {
-            await this.connectSupabase();
-        });
+        // Sync controls
+        const connectSyncBtn = document.getElementById('connect-sync');
+        if (connectSyncBtn) {
+            connectSyncBtn.addEventListener('click', async () => {
+                await this.connectSync();
+            });
+        }
 
-        document.getElementById('backup-supabase').addEventListener('click', async () => {
-            await this.backupToSupabase('manual_backup');
-        });
+        const disconnectSyncBtn = document.getElementById('disconnect-sync');
+        if (disconnectSyncBtn) {
+            disconnectSyncBtn.addEventListener('click', () => {
+                this.disconnectSync();
+            });
+        }
 
-        document.getElementById('sync-supabase').addEventListener('click', async () => {
-            await this.syncToSupabase('manual_sync');
-        });
+        const shareBtnEl = document.getElementById('share-profile-btn');
+        if (shareBtnEl) {
+            shareBtnEl.addEventListener('click', () => {
+                this.openShareModal();
+            });
+        }
 
         // Statistics filters (also updates graphs now)
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -457,8 +483,6 @@ class FeedingTracker {
             if (confirm('¿Estás seguro de que quieres eliminar TODOS los registros? Esta acción no se puede deshacer.')) {
                 if (confirm('Última confirmación: ¿Realmente quieres borrar todos los datos?')) {
                     try {
-                        await this.backupToSupabase('before_clear_all');
-
                         if (this.useIndexedDB) {
                             await db.clearAllData();
                         }
@@ -486,7 +510,7 @@ class FeedingTracker {
                         this.updateAgeDisplay();
                         alert('Todos los datos han sido eliminados.');
                         this.clearNextFeedingSchedule();
-                        await this.syncToSupabase('after_clear_all');
+                        if (this.syncReady) await BftSync.deleteAllRecords(this.currentProfileId);
                     } catch (error) {
                         console.error('Failed to clear data:', error);
                         alert('Error al eliminar los datos.');
@@ -619,6 +643,21 @@ class FeedingTracker {
                 <span class="status-icon">❌</span>
                 <span class="status-text">Error de almacenamiento</span>
             `;
+        }
+
+        // Update snapshot rollback info label
+        const snapshotInfoEl = document.getElementById('snapshot-info');
+        if (snapshotInfoEl && this.useIndexedDB) {
+            const info = db.getSnapshotInfo();
+            if (info.exists) {
+                const when = new Date(info.timestamp).toLocaleString();
+                snapshotInfoEl.textContent =
+                    `Respaldo local: ${info.recordCount} registros guardados el ${when}. ` +
+                    `Usa "Restaurar respaldo local" para volver a este punto.`;
+            } else {
+                snapshotInfoEl.textContent =
+                    'No hay respaldo local aún. Se creará automáticamente al iniciar la app.';
+            }
         }
     }
 
@@ -791,6 +830,7 @@ class FeedingTracker {
                     timestamp: feeding.time,
                     ...feeding
                 });
+                this.markRecordDirty('feeding', this.feedings[0]);
             } else {
                 // Fallback to localStorage
                 const localFeeding = {
@@ -844,6 +884,7 @@ class FeedingTracker {
             try {
                 if (this.useIndexedDB) {
                     await db.deleteFeeding(id);
+                    this.markRecordDeleted('feeding', id);
                 }
                 this.feedings = this.feedings.filter(f => f.id !== id);
                 if (!this.useIndexedDB) {
@@ -950,6 +991,7 @@ class FeedingTracker {
                     timestamp: diaper.time,
                     ...diaper
                 });
+                this.markRecordDirty('diaper', this.diapers[0]);
             } else {
                 const localDiaper = {
                     id: Date.now(),
@@ -987,6 +1029,7 @@ class FeedingTracker {
             try {
                 if (this.useIndexedDB) {
                     await db.deleteDiaper(id);
+                    this.markRecordDeleted('diaper', id);
                 }
                 this.diapers = this.diapers.filter(d => d.id !== id);
                 if (!this.useIndexedDB) {
@@ -1063,6 +1106,7 @@ class FeedingTracker {
                     timestamp: measurement.time,
                     ...measurement
                 });
+                this.markRecordDirty('measurement', this.measurements[0]);
             } else {
                 // LocalStorage fallback (simplified)
                 const localMeasurement = {
@@ -1098,6 +1142,7 @@ class FeedingTracker {
             try {
                 if (this.useIndexedDB) {
                     await db.deleteMeasurement(id);
+                    this.markRecordDeleted('measurement', id);
                 }
                 this.measurements = this.measurements.filter(m => m.id !== id);
                 if (!this.useIndexedDB) {
@@ -1293,6 +1338,7 @@ class FeedingTracker {
             if (this.useIndexedDB) {
                 const id = await db.addMedicine(medicine);
                 this.medicines.unshift({ id, timestamp: medicine.time, ...medicine });
+                this.markRecordDirty('medicine', this.medicines[0]);
                 console.log('Medicine added to IndexedDB with ID:', id);
             } else {
                 const localMedicine = { id: Date.now(), timestamp: medicine.time, ...medicine };
@@ -1315,7 +1361,10 @@ class FeedingTracker {
     async deleteMedicine(id) {
         if (confirm('¿Estás seguro de que quieres eliminar este medicamento?')) {
             try {
-                if (this.useIndexedDB) await db.deleteMedicine(id);
+                if (this.useIndexedDB) {
+                    await db.deleteMedicine(id);
+                    this.markRecordDeleted('medicine', id);
+                }
                 this.medicines = this.medicines.filter(m => m.id !== id);
                 if (!this.useIndexedDB) this.saveToLocalStorage();
                 await this.renderMedicineList();
@@ -1348,6 +1397,7 @@ class FeedingTracker {
                 const nextDose = new Date(Date.now() + medicine.interval * 60 * 60 * 1000).toISOString();
                 if (this.useIndexedDB) {
                     await db.updateMedicine(id, { nextDose });
+                    this.markRecordDirty('medicine', { ...medicine, nextDose });
                 }
                 medicine.nextDose = nextDose;
             }
@@ -1356,6 +1406,7 @@ class FeedingTracker {
             if (this.useIndexedDB) {
                 const newId = await db.addMedicine(historyEntry);
                 this.medicines.unshift({ id: newId, timestamp: historyEntry.time, ...historyEntry });
+                this.markRecordDirty('medicine', this.medicines[0]);
             } else {
                 const localMedicine = { id: Date.now() + 1, timestamp: historyEntry.time, ...historyEntry };
                 this.medicines.unshift(localMedicine);
@@ -1377,6 +1428,10 @@ class FeedingTracker {
             try {
                 if (this.useIndexedDB) {
                     await db.updateMedicine(id, { active: false, nextDose: null });
+                    const medicine = this.medicines.find(m => m.id === id);
+                    if (medicine) {
+                        this.markRecordDirty('medicine', { ...medicine, active: false, nextDose: null });
+                    }
                 }
                 const medicine = this.medicines.find(m => m.id === id);
                 if (medicine) {
@@ -1491,6 +1546,7 @@ class FeedingTracker {
             if (this.useIndexedDB) {
                 const id = await db.addTemperature(temperature);
                 this.temperatures.unshift({ id, timestamp: temperature.time, ...temperature });
+                this.markRecordDirty('temperature', this.temperatures[0]);
             } else {
                 const localTemp = { id: Date.now(), timestamp: temperature.time, ...temperature };
                 this.temperatures.unshift(localTemp);
@@ -1515,7 +1571,10 @@ class FeedingTracker {
     async deleteTemperature(id) {
         if (confirm('¿Estás seguro de que quieres eliminar este registro?')) {
             try {
-                if (this.useIndexedDB) await db.deleteTemperature(id);
+                if (this.useIndexedDB) {
+                    await db.deleteTemperature(id);
+                    this.markRecordDeleted('temperature', id);
+                }
                 this.temperatures = this.temperatures.filter(t => t.id !== id);
                 if (!this.useIndexedDB) this.saveToLocalStorage();
                 await this.renderTemperatureList();
@@ -1598,6 +1657,7 @@ class FeedingTracker {
             if (this.useIndexedDB) {
                 const id = await db.addAppointment(appointment);
                 this.appointments.push({ id, timestamp: appointment.time, ...appointment });
+                this.markRecordDirty('appointment', this.appointments[this.appointments.length - 1]);
             } else {
                 const localAppt = { id: Date.now(), timestamp: appointment.time, ...appointment };
                 this.appointments.push(localAppt);
@@ -1621,7 +1681,10 @@ class FeedingTracker {
     async deleteAppointment(id) {
         if (confirm('¿Estás seguro de que quieres eliminar esta cita?')) {
             try {
-                if (this.useIndexedDB) await db.deleteAppointment(id);
+                if (this.useIndexedDB) {
+                    await db.deleteAppointment(id);
+                    this.markRecordDeleted('appointment', id);
+                }
                 this.appointments = this.appointments.filter(a => a.id !== id);
                 if (!this.useIndexedDB) this.saveToLocalStorage();
                 await this.renderAppointmentList();
@@ -1713,6 +1776,7 @@ class FeedingTracker {
             if (this.useIndexedDB) {
                 const id = await db.addJournalEntry(entry);
                 this.journalEntries.unshift({ id, timestamp: entry.time, ...entry });
+                this.markRecordDirty('journal', this.journalEntries[0]);
             } else {
                 const localEntry = { id: Date.now(), timestamp: entry.time, ...entry };
                 this.journalEntries.unshift(localEntry);
@@ -1736,7 +1800,10 @@ class FeedingTracker {
     async deleteJournalEntry(id) {
         if (confirm('¿Estás seguro de que quieres eliminar este evento?')) {
             try {
-                if (this.useIndexedDB) await db.deleteJournalEntry(id);
+                if (this.useIndexedDB) {
+                    await db.deleteJournalEntry(id);
+                    this.markRecordDeleted('journal', id);
+                }
                 this.journalEntries = this.journalEntries.filter(e => e.id !== id);
                 if (!this.useIndexedDB) this.saveToLocalStorage();
                 await this.renderJournalList();
@@ -2972,8 +3039,9 @@ class FeedingTracker {
                     }
 
                     await this.refreshAllViewsAfterImport();
-                    await this.backupToSupabase('import_csv');
-                    await this.syncToSupabase('import_csv');
+                    if (this.syncReady) {
+                        await this.forcePushToRemote();
+                    }
                     alert('¡Importación exitosa!');
                 }
             } catch (error) {
@@ -3176,8 +3244,9 @@ class FeedingTracker {
                 this.renderComplementaryCatalog();
                 this.populateComplementaryFoodSelect();
                 this.applyDarkMode();
-                await this.backupToSupabase('import_json');
-                await this.syncToSupabase('import_json');
+                if (this.syncReady) {
+                    await this.forcePushToRemote();
+                }
                 alert('¡Importación JSON exitosa!');
             } catch (error) {
                 console.error(error);
@@ -3200,6 +3269,7 @@ class FeedingTracker {
             await db.setMetadata('birthDate', this.birthDate);
             await db.setMetadata('notificationsEnabled', this.notificationsEnabled);
             await db.setMetadata('complementaryCatalog', this.complementaryCatalog);
+            this.pushSettingsToRemote();
         } else {
             // Fallback to localStorage
             this.saveToLocalStorage();
@@ -3374,73 +3444,530 @@ class FeedingTracker {
         });
     }
 
-    setSupabaseStatus(icon, text) {
-        const statusContainer = document.getElementById('supabase-status');
-        if (!statusContainer) return;
+    // ============= SYNC: Dirty Tracking & Batch Push =============
 
-        statusContainer.innerHTML = `
-            <div class="status-indicator">
-                <span class="status-icon">${icon}</span>
-                <span class="status-text">${text}</span>
-            </div>
-        `;
+    markRecordDirty(recordType, record) {
+        if (!this.syncReady || !record || !record.id) return;
+        const key = `${recordType}-${record.id}`;
+        this.pendingSyncRecords.set(key, { type: recordType, record });
+        this.scheduleSync();
     }
 
-    async initializeCloudBackup() {
-        if (!window.BabyFoodSupabaseSync || !window.SUPABASE_CONFIG) {
-            this.setSupabaseStatus('☁️', 'Cliente Supabase no cargado');
+    markRecordDeleted(recordType, recordId) {
+        if (!this.syncReady) return;
+        this.pendingSyncRecords.delete(`${recordType}-${recordId}`);
+        this.pendingDeletes.push({ type: recordType, id: recordId });
+        this.scheduleSync();
+    }
+
+    scheduleSync() {
+        if (this.syncTimeout) clearTimeout(this.syncTimeout);
+        this.syncTimeout = setTimeout(() => this.syncDirtyRecords(), 1500);
+    }
+
+    async syncDirtyRecords() {
+        if (!this.syncReady || this.isSyncing) return;
+        if (this.pendingSyncRecords.size === 0 && this.pendingDeletes.length === 0) return;
+
+        const recordsToSync = Array.from(this.pendingSyncRecords.values());
+        const deletesToSync = [...this.pendingDeletes];
+        this.pendingSyncRecords.clear();
+        this.pendingDeletes = [];
+
+        this.isSyncing = true;
+        this.setSyncStatus('syncing');
+
+        try {
+            if (recordsToSync.length > 0) {
+                const rows = recordsToSync.map(({type, record}) =>
+                    BftSync.sanitizeRecord(record, this.currentProfileId, this.currentBabyId, type));
+                await BftSync.pushRecords(this.currentProfileId, rows);
+            }
+            for (const {type, id} of deletesToSync) {
+                await BftSync.deleteRecord(this.currentProfileId, type, id);
+            }
+            this.setSyncStatus('ok');
+        } catch (e) {
+            console.error('Sync failed:', e);
+            recordsToSync.forEach(r => this.pendingSyncRecords.set(`${r.type}-${r.record.id}`, r));
+            this.pendingDeletes.push(...deletesToSync);
+            this.setSyncStatus('error');
+        } finally {
+            this.isSyncing = false;
+            if (this.pendingSyncRecords.size > 0 || this.pendingDeletes.length > 0) {
+                this.scheduleSync();
+            }
+        }
+    }
+
+    // ============= SYNC: Status UI =============
+
+    setSyncStatus(state, detail = '') {
+        const el = document.getElementById('sync-status-badge');
+        if (!el) return;
+        
+        const states = {
+            'offline':  { label: '◌ Sin conexión', cls: 'sync-offline' },
+            'loading':  { label: '⟳ Conectando…', cls: 'sync-loading' },
+            'syncing':  { label: '⟳ Sincronizando…', cls: 'sync-loading' },
+            'ok':       { label: '✓ Sincronizado', cls: 'sync-ok' },
+            'error':    { label: '⚠ Error sync', cls: 'sync-error' },
+            'disabled': { label: '☁️ No configurado', cls: 'sync-offline' }
+        };
+        
+        const s = states[state] || states['offline'];
+        el.textContent = detail || s.label;
+        el.className = `sync-badge ${s.cls}`;
+    }
+
+    // ============= SYNC: Init Flow =============
+
+    async initSync() {
+        // Pre-populate credential inputs from localStorage
+        const config = BftSync.getSupabaseConfig();
+        const urlInput = document.getElementById('supabase-url-input');
+        const keyInput = document.getElementById('supabase-key-input');
+        if (config && urlInput) urlInput.value = config.url || '';
+        if (config && keyInput) keyInput.value = config.anonKey || '';
+
+        if (!BftSync.isSupabaseConfigured()) {
+            this.setSyncStatus('disabled');
+            this.updateSyncUI();
             return;
         }
 
-        this.supabaseSync = new window.BabyFoodSupabaseSync(window.SUPABASE_CONFIG);
-        if (!this.supabaseSync.isConfigured()) {
-            this.setSupabaseStatus('☁️', 'No configurado. Edita supabase-config.js');
+        this.setSyncStatus('loading');
+
+        try {
+            const { profileId, babyId } = await BftSync.ensureProfile();
+            this.currentProfileId = profileId;
+            this.currentBabyId = babyId;
+
+            // ── Step 1: Check what's on remote ───────────────────────────────────
+            const initialRemote = await BftSync.pullData(profileId);
+            const remoteIsEmpty = !initialRemote || initialRemote.totalCount === 0;
+
+            const hasLocal = this.feedings.length > 0 || this.diapers.length > 0 ||
+                this.measurements.length > 0 || this.medicines.length > 0 ||
+                this.temperatures.length > 0 || this.appointments.length > 0 ||
+                this.journalEntries.length > 0;
+
+            // ── Step 2: Four explicit scenarios ──────────────────────────────────
+            if (!remoteIsEmpty) {
+                // [A] Remote has data → remote wins, replace local.
+                //     (Typical for joining a shared profile or re-installing the app.)
+                console.log(`initSync [A]: remote has ${initialRemote.totalCount} records — replacing local`);
+                await this.replaceLocalWithRemote(initialRemote);
+                const remoteSettings = await BftSync.pullSettings(profileId, babyId);
+                if (remoteSettings) this.applyRemoteSettings(remoteSettings);
+
+            } else if (hasLocal) {
+                // [B] Remote is empty, local has data → push local up (first-time seed).
+                //     NEVER call replaceLocalWithRemote here; local is the source of truth.
+                console.log(`initSync [B]: remote empty, local has data — seeding remote`);
+
+                // Check for legacy snapshot in remote (old bft_latest_state table).
+                // If found, it means this profileId was used before — we ignore it and
+                // let local win (local is more up-to-date than a stale snapshot).
+                const legacy = await BftSync.migrateFromLegacySnapshot(profileId, babyId);
+                if (legacy.migrated) {
+                    console.log(`initSync [B]: legacy snapshot found (${legacy.count} records) — overwriting with current local data`);
+                }
+
+                // Push current local data (overrides any stale legacy records just uploaded)
+                await BftSync.pushAllData(profileId, babyId, {
+                    feedings: this.feedings,
+                    diapers: this.diapers,
+                    measurements: this.measurements,
+                    medicines: this.medicines,
+                    temperatures: this.temperatures,
+                    appointments: this.appointments,
+                    journal: this.journalEntries
+                });
+                await BftSync.pushSettings(profileId, babyId, this.buildSettingsSnapshot());
+
+            } else {
+                // [C] Both empty → try legacy migration as the seed source.
+                console.log('initSync [C]: both remote and local empty — attempting legacy migration');
+                const legacy = await BftSync.migrateFromLegacySnapshot(profileId, babyId);
+
+                if (legacy.migrated && legacy.count > 0) {
+                    // Legacy records are now in remote; pull them into local.
+                    console.log(`initSync [C]: legacy migrated ${legacy.count} records — pulling into local`);
+                    const afterLegacy = await BftSync.pullData(profileId);
+                    if (afterLegacy && afterLegacy.totalCount > 0) {
+                        await this.replaceLocalWithRemote(afterLegacy);
+                        const legacySettings = await BftSync.pullSettings(profileId, babyId);
+                        if (legacySettings) this.applyRemoteSettings(legacySettings);
+                    }
+                } else {
+                    // [D] Truly empty on both sides — nothing to do.
+                    console.log('initSync [D]: fresh install, no data anywhere');
+                }
+            }
+
+            // Subscribe to realtime changes
+            this.realtimeChannel = BftSync.subscribeToProfile(
+                profileId,
+                (payload) => this.handleRealtimeRecordChange(payload),
+                (payload) => this.handleRealtimeSettingsChange(payload)
+            );
+
+            this.syncReady = true;
+            this.setSyncStatus('ok');
+            this.updateSyncUI();
+        } catch (e) {
+            console.error('initSync error:', e);
+            this.setSyncStatus('error');
+        }
+    }
+
+    async replaceLocalWithRemote(remote) {
+        if (this.useIndexedDB) {
+            // --- Safety snapshot before destructive clear ---
+            // If any remote write fails, restoreSnapshot() brings data back.
+            let preReplaceSnapshot = null;
+            try {
+                preReplaceSnapshot = await db.snapshotAllData();
+            } catch (snapErr) {
+                console.warn('Could not snapshot before replaceLocalWithRemote (non-fatal):', snapErr);
+            }
+
+            try {
+                await db.clearAllData();
+                for (const f of remote.feedings)     await db.addFeeding(f);
+                for (const d of remote.diapers)      await db.addDiaper(d);
+                for (const m of remote.measurements) await db.addMeasurement(m);
+                for (const m of remote.medicines)    await db.addMedicine(m);
+                for (const t of remote.temperatures) await db.addTemperature(t);
+                for (const a of remote.appointments) await db.addAppointment(a);
+                for (const j of remote.journal)      await db.addJournalEntry(j);
+            } catch (writeErr) {
+                console.error('replaceLocalWithRemote failed, rolling back:', writeErr);
+                // Attempt rollback from the snapshot we just took
+                if (preReplaceSnapshot) {
+                    try {
+                        await db.restoreSnapshot(preReplaceSnapshot);
+                        console.log('✅ Rollback successful');
+                    } catch (rollbackErr) {
+                        console.error('❌ Rollback also failed — data may need manual restore from Settings:', rollbackErr);
+                    }
+                }
+                throw writeErr; // Re-throw so initSync() catches it and shows error state
+            }
+        }
+        this.feedings       = remote.feedings;
+        this.diapers        = remote.diapers;
+        this.measurements   = remote.measurements;
+        this.medicines      = remote.medicines;
+        this.temperatures   = remote.temperatures;
+        this.appointments   = remote.appointments;
+        this.journalEntries = remote.journal;
+        if (!this.useIndexedDB) {
+            this.saveToLocalStorage();
+        }
+        await this.refreshAllViews();
+    }
+
+    /**
+     * Rollback IndexedDB to the last saved snapshot.
+     * Called from the Settings → "Restaurar respaldo local" button.
+     */
+    async rollbackFromSnapshot() {
+        const info = db.getSnapshotInfo();
+        if (!info.exists) {
+            alert('❌ No hay ningún respaldo local disponible.');
             return;
         }
 
-        const result = await this.supabaseSync.initialize();
-        if (!result.ok) {
-            this.supabaseReady = false;
-            this.setSupabaseStatus('❌', 'Error al iniciar Supabase');
+        const when = new Date(info.timestamp).toLocaleString();
+        if (!confirm(`¿Restaurar ${info.recordCount} registros del respaldo del ${when}?\n\nEsto reemplazará los datos actuales.`)) return;
+
+        try {
+            const result = await db.restoreSnapshot();
+            await this.loadFromStorage();
+            await this.refreshAllViews();
+            alert(`✅ Restaurado correctamente (${result.restored} registros del ${new Date(result.timestamp).toLocaleString()}).`);
+        } catch (e) {
+            console.error('Rollback error:', e);
+            alert('❌ Error al restaurar: ' + e.message);
+        }
+    }
+
+    applyRemoteSettings(settings) {
+        if (settings.timezone) this.timezone = settings.timezone;
+        if (settings.darkMode !== undefined) {
+            this.darkMode = settings.darkMode;
+            this.applyDarkMode();
+        }
+        if (settings.defaultInterval) this.defaultInterval = settings.defaultInterval;
+        if (settings.dailyMilkTarget) this.dailyMilkTarget = settings.dailyMilkTarget;
+        if (settings.birthDate) {
+            this.birthDate = settings.birthDate;
+            this.updateAgeDisplay();
+        }
+        if (settings.notificationsEnabled !== undefined) {
+            this.notificationsEnabled = settings.notificationsEnabled;
+        }
+    }
+
+    buildSettingsSnapshot() {
+        return {
+            timezone: this.timezone,
+            darkMode: this.darkMode,
+            defaultInterval: this.defaultInterval,
+            dailyMilkTarget: this.dailyMilkTarget,
+            birthDate: this.birthDate,
+            notificationsEnabled: this.notificationsEnabled
+        };
+    }
+
+    async refreshAllViews() {
+        await this.renderFeedingList();
+        await this.renderDiaperList();
+        await this.renderMeasurementList();
+        await this.renderMedicineList();
+        await this.renderTemperatureList();
+        await this.renderAppointmentList();
+        await this.renderJournalList();
+        await this.updateDiaperTodaySummary();
+        this.updateAgeDisplay();
+        this.checkNextFeeding();
+        this.updateDailyProgressDisplay();
+        this.updateStats('today').catch(console.warn);
+        this.updateGraphs('today').catch(console.warn);
+    }
+
+    // ============= SYNC: Realtime Handlers =============
+
+    async handleRealtimeRecordChange(payload) {
+        const { eventType, new: newRow, old: oldRow } = payload;
+        
+        try {
+            if (eventType === 'DELETE' && oldRow) {
+                const type = oldRow.record_type;
+                const id = oldRow.id;
+                if (this.useIndexedDB) {
+                    const storeMap = {
+                        feeding: STORES.FEEDINGS, diaper: STORES.DIAPERS,
+                        measurement: STORES.MEASUREMENTS, medicine: STORES.MEDICINES,
+                        temperature: STORES.TEMPERATURES, appointment: STORES.APPOINTMENTS,
+                        journal: STORES.JOURNAL
+                    };
+                    const store = storeMap[type];
+                    if (store) await db.deleteRecordById(store, id);
+                }
+                this.removeLocalRecord(type, id);
+            } else if ((eventType === 'INSERT' || eventType === 'UPDATE') && newRow) {
+                const localRecord = BftSync.mapDbToLocal(newRow);
+                if (!localRecord) return;
+                const type = newRow.record_type;
+                
+                if (this.useIndexedDB) {
+                    const storeMap = {
+                        feeding: STORES.FEEDINGS, diaper: STORES.DIAPERS,
+                        measurement: STORES.MEASUREMENTS, medicine: STORES.MEDICINES,
+                        temperature: STORES.TEMPERATURES, appointment: STORES.APPOINTMENTS,
+                        journal: STORES.JOURNAL
+                    };
+                    const store = storeMap[type];
+                    if (store) await db.upsertRecord(store, localRecord);
+                }
+                this.upsertLocalRecord(type, localRecord);
+            }
+            
+            await this.refreshAllViews();
+        } catch (e) {
+            console.error('Realtime handler error:', e);
+        }
+    }
+
+    removeLocalRecord(type, id) {
+        const arrayMap = {
+            feeding: 'feedings', diaper: 'diapers', measurement: 'measurements',
+            medicine: 'medicines', temperature: 'temperatures',
+            appointment: 'appointments', journal: 'journalEntries'
+        };
+        const arrName = arrayMap[type];
+        if (arrName && Array.isArray(this[arrName])) {
+            this[arrName] = this[arrName].filter(r => r.id !== id);
+        }
+    }
+
+    upsertLocalRecord(type, record) {
+        const arrayMap = {
+            feeding: 'feedings', diaper: 'diapers', measurement: 'measurements',
+            medicine: 'medicines', temperature: 'temperatures',
+            appointment: 'appointments', journal: 'journalEntries'
+        };
+        const arrName = arrayMap[type];
+        if (!arrName || !Array.isArray(this[arrName])) return;
+        
+        const idx = this[arrName].findIndex(r => r.id === record.id);
+        if (idx !== -1) {
+            this[arrName][idx] = record;
+        } else {
+            this[arrName].unshift(record);
+        }
+    }
+
+    async handleRealtimeSettingsChange(payload) {
+        try {
+            const settings = await BftSync.pullSettings(this.currentProfileId, this.currentBabyId);
+            if (settings) {
+                this.applyRemoteSettings(settings);
+            }
+        } catch (e) {
+            console.error('Settings sync error:', e);
+        }
+    }
+
+    // ============= SYNC: Share & Join =============
+
+    openShareModal() {
+        if (!this.currentProfileId) {
+            alert('No hay perfil sincronizado. Configura Supabase primero.');
+            return;
+        }
+        const url = `${window.location.origin}${window.location.pathname}?profile=${this.currentProfileId}`;
+        const linkEl = document.getElementById('share-link');
+        const codeEl = document.getElementById('share-code');
+        const joinEl = document.getElementById('join-code-input');
+        if (linkEl) linkEl.value = url;
+        if (codeEl) codeEl.textContent = this.currentProfileId;
+        if (joinEl) joinEl.value = '';
+        const modal = document.getElementById('share-modal');
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    closeShareModal() {
+        const modal = document.getElementById('share-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    async copyShareLink() {
+        try {
+            const linkEl = document.getElementById('share-link');
+            if (linkEl) {
+                await navigator.clipboard.writeText(linkEl.value);
+                alert('✅ ¡Enlace copiado!');
+            }
+        } catch {
+            const linkEl = document.getElementById('share-link');
+            if (linkEl) { linkEl.select(); document.execCommand('copy'); }
+            alert('✅ ¡Enlace copiado!');
+        }
+    }
+
+    async joinProfile() {
+        const code = document.getElementById('join-code-input')?.value?.trim();
+        if (!BftSync.isValidUUID(code)) {
+            alert('❌ Código inválido. Debe ser un UUID.');
+            return;
+        }
+        if (code === this.currentProfileId) {
+            alert('Ya estás usando ese perfil.');
+            return;
+        }
+        if (!confirm('¿Cambiar a ese perfil?\\nTu perfil actual seguirá en el servidor.')) return;
+
+        if (this.realtimeChannel) {
+            BftSync.unsubscribeChannel(this.realtimeChannel);
+            this.realtimeChannel = null;
+        }
+        this.syncReady = false;
+        BftSync.setProfileId(code);
+        this.closeShareModal();
+        await this.initSync();
+        await this.loadFromStorage();
+        await this.refreshAllViews();
+    }
+
+    async forcePushToRemote() {
+        if (!this.syncReady || !this.currentProfileId) return;
+        if (!confirm('¿Sobrescribir datos remotos con los datos locales?')) return;
+        
+        this.setSyncStatus('syncing');
+        try {
+            await BftSync.deleteAllRecords(this.currentProfileId);
+            await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
+                feedings: this.feedings,
+                diapers: this.diapers,
+                measurements: this.measurements,
+                medicines: this.medicines,
+                temperatures: this.temperatures,
+                appointments: this.appointments,
+                journal: this.journalEntries
+            });
+            await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
+            this.setSyncStatus('ok');
+            alert('✅ Datos sincronizados correctamente.');
+        } catch (e) {
+            console.error('Force push error:', e);
+            this.setSyncStatus('error');
+            alert('❌ Error al sincronizar.');
+        }
+    }
+
+    // ============= SYNC: Connect / Disconnect =============
+
+    async connectSync() {
+        const urlInput = document.getElementById('supabase-url-input');
+        const keyInput = document.getElementById('supabase-key-input');
+        if (!urlInput || !keyInput) return;
+
+        const url = urlInput.value.trim();
+        const key = keyInput.value.trim();
+
+        if (!url || !key) {
+            alert('Ingresa la URL y la Key de Supabase.');
             return;
         }
 
-        this.supabaseReady = true;
-        this.setSupabaseStatus('✅', `Conectado (perfil: ${result.profileId.slice(0, 8)}...)`);
-        this.supabaseSync.startAutoSync(this, 5);
+        BftSync.saveSupabaseConfig(url, key);
+        await this.initSync();
     }
 
-    async connectSupabase() {
-        await this.initializeCloudBackup();
-        if (this.supabaseReady) {
-            await this.backupToSupabase('connect_button');
-            await this.syncToSupabase('connect_button');
+    disconnectSync() {
+        if (this.realtimeChannel) {
+            BftSync.unsubscribeChannel(this.realtimeChannel);
+            this.realtimeChannel = null;
+        }
+        this.syncReady = false;
+        this.currentProfileId = null;
+        this.currentBabyId = null;
+        BftSync.clearSupabaseConfig();
+        this.setSyncStatus('disabled');
+        this.updateSyncUI();
+    }
+
+    updateSyncUI() {
+        const connectSection = document.getElementById('sync-connect-section');
+        const connectedSection = document.getElementById('sync-connected-section');
+        const profileIdEl = document.getElementById('sync-profile-id');
+
+        if (this.syncReady && this.currentProfileId) {
+            if (connectSection) connectSection.classList.add('hidden');
+            if (connectedSection) connectedSection.classList.remove('hidden');
+            if (profileIdEl) profileIdEl.textContent = this.currentProfileId.slice(0, 8) + '...';
+        } else {
+            if (connectSection) connectSection.classList.remove('hidden');
+            if (connectedSection) connectedSection.classList.add('hidden');
         }
     }
 
-    async backupToSupabase(reason = 'manual') {
-        if (!this.supabaseReady || !this.supabaseSync) return;
+    // ============= SYNC: Settings Push =============
 
-        const result = await this.supabaseSync.backupSnapshot(this, reason);
-        if (!result.ok) {
-            this.setSupabaseStatus('⚠️', 'Conectado, pero fallo el backup');
-            return;
+    async pushSettingsToRemote() {
+        if (!this.syncReady) return;
+        try {
+            await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
+        } catch (e) {
+            console.error('Settings push error:', e);
         }
-
-        this.setSupabaseStatus('✅', 'Backup remoto completado');
     }
 
-    async syncToSupabase(reason = 'manual') {
-        if (!this.supabaseReady || !this.supabaseSync) return;
-
-        const result = await this.supabaseSync.syncCurrentState(this, reason);
-        if (!result.ok) {
-            this.setSupabaseStatus('⚠️', 'Conectado, pero fallo la sincronizacion');
-            return;
-        }
-
-        this.setSupabaseStatus('✅', `Sincronizado: ${new Date(result.lastSyncAt).toLocaleTimeString()}`);
-    }
+    // Old Supabase methods removed — replaced by sync system above
 
     loadFromLocalStorage() {
         const feedingsData = localStorage.getItem('feedings');

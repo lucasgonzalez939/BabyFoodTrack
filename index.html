@@ -21,6 +21,7 @@
             <button class="tab-button" data-tab="health">Salud</button>
             <button class="tab-button" data-tab="statistics">Estadísticas</button>
             <button class="tab-button" data-tab="settings">Ajustes</button>
+            <span id="sync-status-badge" class="sync-badge sync-offline">◌ Sin conexión</span>
         </nav>
 
         <!-- Tracker Tab -->
@@ -438,19 +439,30 @@
                 </div>
 
                 <div class="setting-item">
-                    <label>Respaldo en Supabase</label>
-                    <div class="setting-actions">
-                        <button id="connect-supabase" class="btn btn-secondary">Conectar</button>
-                        <button id="backup-supabase" class="btn btn-secondary">Respaldar Ahora</button>
-                        <button id="sync-supabase" class="btn btn-secondary">Sincronizar Estado</button>
-                    </div>
-                    <div id="supabase-status" class="storage-status">
-                        <div class="status-indicator">
-                            <span class="status-icon">☁️</span>
-                            <span class="status-text">No configurado</span>
+                    <label>Sincronización en la Nube</label>
+
+                    <!-- Connect section (shown when not connected) -->
+                    <div id="sync-connect-section">
+                        <div class="setting-actions" style="flex-direction: column; gap: 8px;">
+                            <input type="url" id="supabase-url-input" class="setting-input" placeholder="URL de Supabase (ej: https://xxx.supabase.co)" style="margin-bottom: 0;">
+                            <input type="text" id="supabase-key-input" class="setting-input" placeholder="Anon Key de Supabase" style="margin-bottom: 0;">
+                            <button id="connect-sync" class="btn btn-primary">🔗 Conectar</button>
                         </div>
+                        <p class="setting-description">Ingresa las credenciales de tu proyecto Supabase para activar sincronización en tiempo real entre dispositivos.</p>
                     </div>
-                    <p class="setting-description">Activa respaldo remoto para evitar pérdida de datos por cambio de dispositivo o navegador.</p>
+
+                    <!-- Connected section (shown when connected) -->
+                    <div id="sync-connected-section" class="hidden">
+                        <div class="setting-actions">
+                            <span class="setting-description" style="margin: 0;">Perfil: <strong id="sync-profile-id">—</strong></span>
+                        </div>
+                        <div class="setting-actions" style="margin-top: 8px;">
+                            <button id="share-profile-btn" class="btn btn-secondary">🔗 Compartir Perfil</button>
+                            <button id="force-push-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.forcePushToRemote()">🔄 Forzar Sync</button>
+                            <button id="disconnect-sync" class="btn btn-danger">Desconectar</button>
+                        </div>
+                        <p class="setting-description">Sincronización activa. Comparte tu perfil para sincronizar con otros dispositivos.</p>
+                    </div>
                 </div>
 
                 <div class="setting-item">
@@ -467,8 +479,15 @@
                     <label>Datos</label>
                     <div class="setting-actions">
                         <button id="clear-all-data" class="btn btn-danger">Borrar Todos los Datos</button>
+                        <button id="rollback-snapshot" class="btn btn-secondary"
+                                onclick="window.tracker && window.tracker.rollbackFromSnapshot()">
+                            ↩ Restaurar respaldo local
+                        </button>
                     </div>
-                    <p class="setting-description">Elimina permanentemente todos los registros de alimentación</p>
+                    <p id="snapshot-info" class="setting-description">
+                        Elimina permanentemente todos los registros de alimentación.
+                        El respaldo local se actualiza automáticamente al iniciar la app.
+                    </p>
                 </div>
 
                 <!-- System Info -->
@@ -817,10 +836,45 @@
         </div>
     </div>
 
+    <!-- Share Profile Modal -->
+    <div id="share-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🔗 Compartir Perfil</h3>
+                <button class="modal-close" onclick="window.tracker && window.tracker.closeShareModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Enlace para compartir</label>
+                    <div class="setting-actions">
+                        <input type="text" id="share-link" readonly class="setting-input" style="margin-bottom: 0; font-size: 12px;">
+                        <button class="btn btn-secondary" onclick="window.tracker && window.tracker.copyShareLink()">Copiar</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Código del perfil</label>
+                    <div class="share-code-display">
+                        <code id="share-code" style="font-size: 11px; word-break: break-all;">—</code>
+                    </div>
+                    <p class="setting-description">Comparte este código con quien quieras que acceda a los datos.</p>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label>Unirse a otro perfil</label>
+                    <div class="setting-actions">
+                        <input type="text" id="join-code-input" class="setting-input" placeholder="Pegar código UUID aquí…" style="margin-bottom: 0; font-size: 12px;">
+                        <button class="btn btn-primary" onclick="window.tracker && window.tracker.joinProfile()">Unirse</button>
+                    </div>
+                    <p class="setting-description" style="color: var(--danger-color);">⚠️ Cambiará tu perfil activo en este dispositivo.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Load in order: db, migration, supabase, then app -->
     <script src="db.js"></script>
     <script src="migration.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="supabase-config.js"></script>
     <script src="supabase-sync.js"></script>
     <script src="app.js"></script>
