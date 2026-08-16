@@ -847,11 +847,11 @@
             <div class="modal-body">
                 <div class="form-group">
                     <label>Enlace para compartir</label>
-                    <div class="setting-actions">
-                        <input type="text" id="share-link" readonly class="setting-input" style="margin-bottom: 0; font-size: 12px;">
-                        <button id="share-api-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.shareViaApi()" style="display: none;">Compartir</button>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="share-link" readonly class="setting-input" style="margin-bottom: 0; font-size: 12px; flex: 1;">
                         <button class="btn btn-secondary" onclick="window.tracker && window.tracker.copyShareLink()">Copiar</button>
                     </div>
+                    <button id="share-api-btn" class="btn btn-primary" onclick="window.tracker && window.tracker.shareViaApi()" style="display: none; width: 100%; margin-top: 8px;">📲 Compartir en otra App</button>
                 </div>
                 <div class="form-group">
                     <label>Código del perfil</label>

@@ -3856,7 +3856,11 @@ class FeedingTracker {
         if (linkEl) linkEl.value = shareUrl;
         if (codeEl) codeEl.textContent = this.currentProfileId;
         if (joinEl) joinEl.value = '';
-        if (shareApiBtn) shareApiBtn.style.display = navigator.share ? 'inline-block' : 'none';
+        
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (shareApiBtn) {
+            shareApiBtn.style.display = (navigator.share && isMobile) ? 'block' : 'none';
+        }
 
         const modal = document.getElementById('share-modal');
         if (modal) modal.classList.remove('hidden');
