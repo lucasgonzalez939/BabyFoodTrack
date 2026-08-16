@@ -3856,10 +3856,8 @@ class FeedingTracker {
         if (linkEl) linkEl.value = shareUrl;
         if (codeEl) codeEl.textContent = this.currentProfileId;
         if (joinEl) joinEl.value = '';
-        
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         if (shareApiBtn) {
-            shareApiBtn.style.display = (navigator.share && isMobile) ? 'block' : 'none';
+            shareApiBtn.style.display = navigator.share ? 'block' : 'none';
         }
 
         const modal = document.getElementById('share-modal');
@@ -3883,6 +3881,9 @@ class FeedingTracker {
             });
         } catch (err) {
             console.log('Share API failed or cancelled', err);
+            if (err.name !== 'AbortError') {
+                alert('Tu navegador no soporta el menú de compartir nativo. Por favor, usa el botón "Copiar".');
+            }
         }
     }
 
@@ -3982,7 +3983,14 @@ class FeedingTracker {
         }
 
         if (!url || !key) {
-            alert('Ingresa la URL y la Key de Supabase.');
+            alert('Por favor ingresa la URL y la Anon Key de Supabase.');
+            return;
+        }
+
+        if (profileVal && BftSync.isValidUUID(profileVal)) {
+            BftSync.setProfileId(profileVal);
+        } else if (profileVal) {
+            alert('El ID de perfil ingresado no es válido (debe ser un UUID o un enlace de invitación).');
             return;
         }
 

@@ -520,7 +520,7 @@
             </div>
             <form id="feeding-form">
                 <div class="form-group">
-                    <label for="feeding-type">Tipo de alimentación:</label>
+                    <label>Tipo de alimentación:</label>
                     <div class="type-selector">
                         <button type="button" class="type-btn active" data-type="bottle">🍼 Biberón</button>
                         <button type="button" class="type-btn" data-type="breast">🤱 Pecho</button>
@@ -529,12 +529,12 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="feeding-time">Fecha y hora:</label>
+                    <label>Fecha y hora:</label>
                     <input type="datetime-local" id="feeding-time" required>
                 </div>
                 
                 <div class="form-group" id="amount-group">
-                    <label for="milk-amount">Cantidad (ml):</label>
+                    <label>Cantidad (ml):</label>
                     <div class="quick-amounts">
                         <button type="button" class="amount-btn" data-amount="60">60ml</button>
                         <button type="button" class="amount-btn" data-amount="90">90ml</button>
@@ -545,7 +545,7 @@
                 </div>
 
                 <div class="form-group hidden" id="duration-group">
-                    <label for="feeding-duration">Duración (minutos):</label>
+                    <label>Duración (minutos):</label>
                     <div class="quick-durations">
                         <button type="button" class="duration-btn" data-duration="10">10 min</button>
                         <button type="button" class="duration-btn" data-duration="15">15 min</button>
@@ -556,18 +556,18 @@
                 </div>
 
                 <div class="form-group hidden" id="complementary-group">
-                    <label for="complementary-food-select">Alimento frecuente:</label>
+                    <label>Alimento frecuente:</label>
                     <select id="complementary-food-select">
                         <option value="">Seleccionar del catalogo...</option>
                     </select>
 
-                    <label for="complementary-food">Alimento:</label>
+                    <label>Alimento:</label>
                     <input type="text" id="complementary-food" placeholder="Ej: Pure de zanahoria">
 
-                    <label for="complementary-grams" style="margin-top: 0.75rem;">Cantidad (g):</label>
+                    <label style="margin-top: 0.75rem;">Cantidad (g):</label>
                     <input type="number" id="complementary-grams" min="1" step="1" placeholder="Ej: 35">
 
-                    <label for="complementary-reaction" style="margin-top: 0.75rem;">Reaccion observada:</label>
+                    <label style="margin-top: 0.75rem;">Reaccion observada:</label>
                     <select id="complementary-reaction">
                         <option value="normal">Sin reaccion</option>
                         <option value="mild">Leve</option>
@@ -575,10 +575,10 @@
                         <option value="severe">Severa</option>
                     </select>
 
-                    <label for="complementary-allergens" style="margin-top: 0.75rem;">Alergenos potenciales:</label>
+                    <label style="margin-top: 0.75rem;">Alergenos potenciales:</label>
                     <input type="text" id="complementary-allergens" placeholder="Ej: Huevo, lacteos">
 
-                    <label for="complementary-notes" style="margin-top: 0.75rem;">Notas:</label>
+                    <label style="margin-top: 0.75rem;">Notas:</label>
                     <textarea id="complementary-notes" rows="2" placeholder="Textura, aceptacion, sintomas, etc."></textarea>
                 </div>
                 
@@ -599,7 +599,7 @@
             </div>
             <form id="diaper-form">
                 <div class="form-group">
-                    <label for="diaper-time">Fecha y hora:</label>
+                    <label>Fecha y hora:</label>
                     <input type="datetime-local" id="diaper-time" required>
                 </div>
                 
@@ -618,7 +618,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="diaper-level">Nivel de llenado:</label>
+                    <label>Nivel de llenado:</label>
                     <div class="level-selector">
                         <button type="button" class="level-btn" data-level="1">Bajo</button>
                         <button type="button" class="level-btn active" data-level="2">Medio</button>
@@ -627,7 +627,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="diaper-notes">Notas (opcional):</label>
+                    <label>Notas (opcional):</label>
                     <textarea id="diaper-notes" rows="3" placeholder="Ej: Color, consistencia, etc."></textarea>
                 </div>
                 
@@ -648,15 +648,15 @@
             </div>
             <form id="weight-form">
                 <div class="form-group">
-                    <label for="weight-time">Fecha:</label>
+                    <label>Fecha:</label>
                     <input type="datetime-local" id="weight-time" required>
                 </div>
                 <div class="form-group">
-                    <label for="weight-value">Peso (kg):</label>
+                    <label>Peso (kg):</label>
                     <input type="number" id="weight-value" step="0.01" min="0" placeholder="Ej: 3.5">
                 </div>
                 <div class="form-group">
-                    <label for="height-value">Altura (cm):</label>
+                    <label>Altura (cm):</label>
                     <input type="number" id="height-value" step="0.1" min="0" placeholder="Ej: 50.5">
                 </div>
                 <div class="modal-actions">
@@ -676,7 +676,7 @@
             </div>
             <form id="medicine-form">
                 <div class="form-group">
-                    <label for="medicine-name">Nombre del Medicamento:</label>
+                    <label>Nombre del Medicamento:</label>
                     <select id="medicine-name-select" class="setting-select">
                         <option value="">Seleccionar medicamento común...</option>
                         <option value="Paracetamol">Paracetamol</option>
@@ -692,15 +692,15 @@
                     <input type="text" id="medicine-name-custom" style="display: none; margin-top: 0.5rem;" placeholder="Nombre del medicamento">
                 </div>
                 <div class="form-group">
-                    <label for="medicine-dose">Dosis:</label>
+                    <label>Dosis:</label>
                     <input type="text" id="medicine-dose" required placeholder="Ej: 2.5ml, 1/2 cucharadita">
                 </div>
                 <div class="form-group">
-                    <label for="medicine-time">Fecha y Hora:</label>
+                    <label>Fecha y Hora:</label>
                     <input type="datetime-local" id="medicine-time" required>
                 </div>
                 <div class="form-group">
-                    <label for="medicine-interval">Tipo de Medicamento:</label>
+                    <label>Tipo de Medicamento:</label>
                     <select id="medicine-type-select" class="setting-select">
                         <option value="0">Ocasional (sin intervalo)</option>
                         <option value="4">Cada 4 horas</option>
@@ -713,7 +713,7 @@
                     <input type="number" id="medicine-interval" min="0" step="0.5" style="display: none; margin-top: 0.5rem;" placeholder="Intervalo en horas">
                 </div>
                 <div class="form-group">
-                    <label for="medicine-notes">Notas:</label>
+                    <label>Notas:</label>
                     <textarea id="medicine-notes" rows="2" placeholder="Motivo, efectos secundarios, etc."></textarea>
                 </div>
                 <div class="modal-actions">
@@ -733,15 +733,15 @@
             </div>
             <form id="temperature-form">
                 <div class="form-group">
-                    <label for="temperature-value">Temperatura (°C):</label>
+                    <label>Temperatura (°C):</label>
                     <input type="number" id="temperature-value" step="0.1" min="30" max="45" required placeholder="Ej: 37.5">
                 </div>
                 <div class="form-group">
-                    <label for="temperature-time">Fecha y Hora:</label>
+                    <label>Fecha y Hora:</label>
                     <input type="datetime-local" id="temperature-time" required>
                 </div>
                 <div class="form-group">
-                    <label for="temperature-notes">Notas:</label>
+                    <label>Notas:</label>
                     <textarea id="temperature-notes" rows="2" placeholder="Síntomas, contexto, etc."></textarea>
                 </div>
                 <div class="modal-actions">
@@ -761,7 +761,7 @@
             </div>
             <form id="appointment-form">
                 <div class="form-group">
-                    <label for="appointment-type">Tipo:</label>
+                    <label>Tipo:</label>
                     <select id="appointment-type" required>
                         <option value="doctor">Consulta Médica</option>
                         <option value="vaccine">Vacuna</option>
@@ -771,19 +771,19 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="appointment-title">Título:</label>
+                    <label>Título:</label>
                     <input type="text" id="appointment-title" required placeholder="Ej: Control mensual">
                 </div>
                 <div class="form-group">
-                    <label for="appointment-time">Fecha y Hora:</label>
+                    <label>Fecha y Hora:</label>
                     <input type="datetime-local" id="appointment-time" required>
                 </div>
                 <div class="form-group">
-                    <label for="appointment-location">Lugar:</label>
+                    <label>Lugar:</label>
                     <input type="text" id="appointment-location" placeholder="Ej: Hospital Central">
                 </div>
                 <div class="form-group">
-                    <label for="appointment-notes">Notas:</label>
+                    <label>Notas:</label>
                     <textarea id="appointment-notes" rows="2" placeholder="Detalles adicionales"></textarea>
                 </div>
                 <div class="modal-actions">
@@ -803,7 +803,7 @@
             </div>
             <form id="journal-form">
                 <div class="form-group">
-                    <label for="journal-category">Categoría:</label>
+                    <label>Categoría:</label>
                     <select id="journal-category" required>
                         <option value="health">Salud</option>
                         <option value="behavior">Comportamiento</option>
@@ -814,19 +814,19 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="journal-title">Título:</label>
+                    <label>Título:</label>
                     <input type="text" id="journal-title" required placeholder="Ej: Primera sonrisa">
                 </div>
                 <div class="form-group">
-                    <label for="journal-time">Fecha y Hora:</label>
+                    <label>Fecha y Hora:</label>
                     <input type="datetime-local" id="journal-time" required>
                 </div>
                 <div class="form-group">
-                    <label for="journal-description">Descripción:</label>
+                    <label>Descripción:</label>
                     <textarea id="journal-description" rows="4" required placeholder="Describe el evento en detalle..."></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="journal-tags">Etiquetas:</label>
+                    <label>Etiquetas:</label>
                     <input type="text" id="journal-tags" placeholder="Separadas por comas: fiebre, vómitos, etc.">
                 </div>
                 <div class="modal-actions">
@@ -848,8 +848,8 @@
                 <div class="form-group">
                     <label>Enlace para compartir</label>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="share-link" readonly class="setting-input" style="margin-bottom: 0; font-size: 12px; flex: 1;">
-                        <button class="btn btn-secondary" onclick="window.tracker && window.tracker.copyShareLink()">Copiar</button>
+                        <input type="text" id="share-link" readonly class="setting-input" style="margin-bottom: 0; font-size: 12px; width: 0; flex: 1; min-width: 0;">
+                        <button class="btn btn-secondary" style="white-space: nowrap;" onclick="window.tracker && window.tracker.copyShareLink()">Copiar</button>
                     </div>
                     <button id="share-api-btn" class="btn btn-primary" onclick="window.tracker && window.tracker.shareViaApi()" style="display: none; width: 100%; margin-top: 8px;">📲 Compartir en otra App</button>
                 </div>
