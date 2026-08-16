@@ -3851,9 +3851,13 @@ class FeedingTracker {
         const linkEl = document.getElementById('share-link');
         const codeEl = document.getElementById('share-code');
         const joinEl = document.getElementById('join-code-input');
+        const shareApiBtn = document.getElementById('share-api-btn');
+
         if (linkEl) linkEl.value = shareUrl;
         if (codeEl) codeEl.textContent = this.currentProfileId;
         if (joinEl) joinEl.value = '';
+        if (shareApiBtn) shareApiBtn.style.display = navigator.share ? 'inline-block' : 'none';
+
         const modal = document.getElementById('share-modal');
         if (modal) modal.classList.remove('hidden');
     }
@@ -3863,23 +3867,25 @@ class FeedingTracker {
         if (modal) modal.classList.add('hidden');
     }
 
+    async shareViaApi() {
+        const linkEl = document.getElementById('share-link');
+        const url = linkEl ? linkEl.value : '';
+        if (!url || !navigator.share) return;
+        try {
+            await navigator.share({
+                title: 'BabyFoodTrack',
+                text: 'Únete a mi perfil en BabyFoodTrack para colaborar:',
+                url: url
+            });
+        } catch (err) {
+            console.log('Share API failed or cancelled', err);
+        }
+    }
+
     async copyShareLink() {
         const linkEl = document.getElementById('share-link');
         const url = linkEl ? linkEl.value : '';
         if (!url) return;
-
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: 'BabyFoodTrack',
-                    text: 'Únete a mi perfil en BabyFoodTrack para colaborar:',
-                    url: url
-                });
-                return;
-            } catch (err) {
-                console.log('Share API failed or cancelled', err);
-            }
-        }
 
         try {
             await navigator.clipboard.writeText(url);
@@ -3945,10 +3951,31 @@ class FeedingTracker {
     async connectSync() {
         const urlInput = document.getElementById('supabase-url-input');
         const keyInput = document.getElementById('supabase-key-input');
-        if (!urlInput || !keyInput) return;
+        const profileInput = document.getElementById('supabase-profile-input');
+        
+        let url = urlInput ? urlInput.value.trim() : '';
+        let key = keyInput ? keyInput.value.trim() : '';
+        let profileVal = profileInput ? profileInput.value.trim() : '';
 
-        const url = urlInput.value.trim();
-        const key = keyInput.value.trim();
+        // Auto-extract if a full URL was pasted into the profile input
+        if (profileVal.startsWith('http')) {
+            try {
+                const pastedUrl = new URL(profileVal);
+                const pUrl = pastedUrl.searchParams.get('url');
+                const pKey = pastedUrl.searchParams.get('key');
+                const pProfile = pastedUrl.searchParams.get('profile');
+                if (pUrl && pKey) {
+                    url = pUrl;
+                    key = pKey;
+                    if (urlInput) urlInput.value = url;
+                    if (keyInput) keyInput.value = key;
+                }
+                if (pProfile) {
+                    profileVal = pProfile;
+                    if (profileInput) profileInput.value = profileVal;
+                }
+            } catch(e) {}
+        }
 
         if (!url || !key) {
             alert('Ingresa la URL y la Key de Supabase.');

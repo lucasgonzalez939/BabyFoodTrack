@@ -445,7 +445,8 @@
                     <div id="sync-connect-section">
                         <div class="setting-actions" style="flex-direction: column; gap: 8px;">
                             <input type="url" id="supabase-url-input" class="setting-input" placeholder="URL de Supabase (ej: https://xxx.supabase.co)" style="margin-bottom: 0;">
-                            <input type="text" id="supabase-key-input" class="setting-input" placeholder="Anon Key de Supabase" style="margin-bottom: 0;">
+                            <input type="password" id="supabase-key-input" class="setting-input" placeholder="Anon Key de Supabase" style="margin-bottom: 0;">
+                            <input type="text" id="supabase-profile-input" class="setting-input" placeholder="ID de Perfil (opcional, o pegar enlace de invitación)" style="margin-bottom: 0;">
                             <button id="connect-sync" class="btn btn-primary">🔗 Conectar</button>
                         </div>
                         <p class="setting-description">Ingresa las credenciales de tu proyecto Supabase para activar sincronización en tiempo real entre dispositivos.</p>
@@ -848,6 +849,7 @@
                     <label>Enlace para compartir</label>
                     <div class="setting-actions">
                         <input type="text" id="share-link" readonly class="setting-input" style="margin-bottom: 0; font-size: 12px;">
+                        <button id="share-api-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.shareViaApi()" style="display: none;">Compartir</button>
                         <button class="btn btn-secondary" onclick="window.tracker && window.tracker.copyShareLink()">Copiar</button>
                     </div>
                 </div>
