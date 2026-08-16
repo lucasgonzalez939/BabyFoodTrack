@@ -46,6 +46,17 @@ class FeedingTracker {
     }
 
     async init() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const shareUrl = urlParams.get('url');
+        const shareKey = urlParams.get('key');
+        if (shareUrl && shareKey) {
+            BftSync.saveSupabaseConfig(shareUrl, shareKey);
+            const cleanUrl = new URL(window.location);
+            cleanUrl.searchParams.delete('url');
+            cleanUrl.searchParams.delete('key');
+            window.history.replaceState({}, '', cleanUrl);
+        }
+
         try {
             // Try to initialize IndexedDB and run migration
             await db.init();
@@ -3829,11 +3840,18 @@ class FeedingTracker {
             alert('No hay perfil sincronizado. Configura Supabase primero.');
             return;
         }
-        const url = `${window.location.origin}${window.location.pathname}?profile=${this.currentProfileId}`;
+        
+        const config = BftSync.getSupabaseConfig();
+        let shareUrl = `${window.location.origin}${window.location.pathname}?profile=${this.currentProfileId}`;
+        
+        if (config && config.url && config.anonKey) {
+            shareUrl += `&url=${encodeURIComponent(config.url)}&key=${encodeURIComponent(config.anonKey)}`;
+        }
+
         const linkEl = document.getElementById('share-link');
         const codeEl = document.getElementById('share-code');
         const joinEl = document.getElementById('join-code-input');
-        if (linkEl) linkEl.value = url;
+        if (linkEl) linkEl.value = shareUrl;
         if (codeEl) codeEl.textContent = this.currentProfileId;
         if (joinEl) joinEl.value = '';
         const modal = document.getElementById('share-modal');
@@ -3846,16 +3864,29 @@ class FeedingTracker {
     }
 
     async copyShareLink() {
-        try {
-            const linkEl = document.getElementById('share-link');
-            if (linkEl) {
-                await navigator.clipboard.writeText(linkEl.value);
-                alert('✅ ¡Enlace copiado!');
+        const linkEl = document.getElementById('share-link');
+        const url = linkEl ? linkEl.value : '';
+        if (!url) return;
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'BabyFoodTrack',
+                    text: 'Únete a mi perfil en BabyFoodTrack para colaborar:',
+                    url: url
+                });
+                return;
+            } catch (err) {
+                console.log('Share API failed or cancelled', err);
             }
+        }
+
+        try {
+            await navigator.clipboard.writeText(url);
+            alert('✅ ¡Enlace copiado al portapapeles!');
         } catch {
-            const linkEl = document.getElementById('share-link');
             if (linkEl) { linkEl.select(); document.execCommand('copy'); }
-            alert('✅ ¡Enlace copiado!');
+            alert('✅ ¡Enlace copiado al portapapeles!');
         }
     }
 

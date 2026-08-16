@@ -155,6 +155,9 @@ async function ensureProfile() {
             localStorage.removeItem('bft_baby_id');
             babyId = null;
         } else {
+            // Valid profile, save it to ensure URL joins are persisted
+            setProfileId(profileId);
+            
             // Validate cached baby belongs to current profile.
             let babyMatchesProfile = false;
             if (isValidUUID(babyId)) {

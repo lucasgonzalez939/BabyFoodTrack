@@ -149,67 +149,64 @@ EXCEPTION
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.is_realtime()
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+AS $$
+BEGIN
+    RETURN current_setting('request.headers', true) IS NULL OR current_setting('request.headers', true) = '';
+END;
+$$;
+
 DO $$
 BEGIN
     -- Remove permissive legacy policies if present.
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_profiles_all' AND tablename = 'bft_profiles') THEN
-        DROP POLICY "anon_profiles_all" ON public.bft_profiles;
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_babies_all' AND tablename = 'bft_babies') THEN
-        DROP POLICY "anon_babies_all" ON public.bft_babies;
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_records_all' AND tablename = 'bft_records') THEN
-        DROP POLICY "anon_records_all" ON public.bft_records;
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_settings_all' AND tablename = 'bft_settings') THEN
-        DROP POLICY "anon_settings_all" ON public.bft_settings;
-    END IF;
+    DROP POLICY IF EXISTS "anon_profiles_all" ON public.bft_profiles;
+    DROP POLICY IF EXISTS "anon_babies_all" ON public.bft_babies;
+    DROP POLICY IF EXISTS "anon_records_all" ON public.bft_records;
+    DROP POLICY IF EXISTS "anon_settings_all" ON public.bft_settings;
 
     -- Profile bootstrap: allow anonymous profile creation.
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_profiles_insert' AND tablename = 'bft_profiles') THEN
-        CREATE POLICY "anon_profiles_insert" ON public.bft_profiles
-            FOR INSERT TO anon
-            WITH CHECK (true);
-    END IF;
+    DROP POLICY IF EXISTS "anon_profiles_insert" ON public.bft_profiles;
+    CREATE POLICY "anon_profiles_insert" ON public.bft_profiles
+        FOR INSERT TO anon
+        WITH CHECK (true);
 
     -- Profile-scoped read/update/delete using x-profile-id header.
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_profiles_select' AND tablename = 'bft_profiles') THEN
-        CREATE POLICY "anon_profiles_select" ON public.bft_profiles
-            FOR SELECT TO anon
-            USING (id = public.bft_request_profile_id());
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_profiles_update' AND tablename = 'bft_profiles') THEN
-        CREATE POLICY "anon_profiles_update" ON public.bft_profiles
-            FOR UPDATE TO anon
-            USING (id = public.bft_request_profile_id())
-            WITH CHECK (id = public.bft_request_profile_id());
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_profiles_delete' AND tablename = 'bft_profiles') THEN
-        CREATE POLICY "anon_profiles_delete" ON public.bft_profiles
-            FOR DELETE TO anon
-            USING (id = public.bft_request_profile_id());
-    END IF;
+    DROP POLICY IF EXISTS "anon_profiles_select" ON public.bft_profiles;
+    CREATE POLICY "anon_profiles_select" ON public.bft_profiles
+        FOR SELECT TO anon
+        USING (id = public.bft_request_profile_id());
 
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_babies_all_scoped' AND tablename = 'bft_babies') THEN
-        CREATE POLICY "anon_babies_all_scoped" ON public.bft_babies
-            FOR ALL TO anon
-            USING (profile_id = public.bft_request_profile_id())
-            WITH CHECK (profile_id = public.bft_request_profile_id());
-    END IF;
+    DROP POLICY IF EXISTS "anon_profiles_update" ON public.bft_profiles;
+    CREATE POLICY "anon_profiles_update" ON public.bft_profiles
+        FOR UPDATE TO anon
+        USING (id = public.bft_request_profile_id())
+        WITH CHECK (id = public.bft_request_profile_id());
 
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_records_all_scoped' AND tablename = 'bft_records') THEN
-        CREATE POLICY "anon_records_all_scoped" ON public.bft_records
-            FOR ALL TO anon
-            USING (profile_id = public.bft_request_profile_id())
-            WITH CHECK (profile_id = public.bft_request_profile_id());
-    END IF;
+    DROP POLICY IF EXISTS "anon_profiles_delete" ON public.bft_profiles;
+    CREATE POLICY "anon_profiles_delete" ON public.bft_profiles
+        FOR DELETE TO anon
+        USING (id = public.bft_request_profile_id());
 
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'anon_settings_all_scoped' AND tablename = 'bft_settings') THEN
-        CREATE POLICY "anon_settings_all_scoped" ON public.bft_settings
-            FOR ALL TO anon
-            USING (profile_id = public.bft_request_profile_id())
-            WITH CHECK (profile_id = public.bft_request_profile_id());
-    END IF;
+    DROP POLICY IF EXISTS "anon_babies_all_scoped" ON public.bft_babies;
+    CREATE POLICY "anon_babies_all_scoped" ON public.bft_babies
+        FOR ALL TO anon
+        USING (public.is_realtime() OR profile_id = public.bft_request_profile_id())
+        WITH CHECK (public.is_realtime() OR profile_id = public.bft_request_profile_id());
+
+    DROP POLICY IF EXISTS "anon_records_all_scoped" ON public.bft_records;
+    CREATE POLICY "anon_records_all_scoped" ON public.bft_records
+        FOR ALL TO anon
+        USING (public.is_realtime() OR profile_id = public.bft_request_profile_id())
+        WITH CHECK (public.is_realtime() OR profile_id = public.bft_request_profile_id());
+
+    DROP POLICY IF EXISTS "anon_settings_all_scoped" ON public.bft_settings;
+    CREATE POLICY "anon_settings_all_scoped" ON public.bft_settings
+        FOR ALL TO anon
+        USING (public.is_realtime() OR profile_id = public.bft_request_profile_id())
+        WITH CHECK (public.is_realtime() OR profile_id = public.bft_request_profile_id());
 END $$;
 
 -- =====================================================
