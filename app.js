@@ -3861,12 +3861,12 @@ class FeedingTracker {
         }
 
         const modal = document.getElementById('share-modal');
-        if (modal) modal.classList.remove('hidden');
+        if (modal) modal.classList.add('active');
     }
 
     closeShareModal() {
         const modal = document.getElementById('share-modal');
-        if (modal) modal.classList.add('hidden');
+        if (modal) modal.classList.remove('active');
     }
 
     async shareViaApi() {
