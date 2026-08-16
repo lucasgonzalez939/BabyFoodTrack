@@ -67,6 +67,17 @@ function isValidUUID(str) {
     return regex.test(str);
 }
 
+function generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 // ====== 3. Profile & Baby Management ======
 function getProfileId() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -94,13 +105,14 @@ function setProfileId(id) {
 }
 
 async function createProfile() {
-    const client = initSupabaseClient();
+    const newProfileId = generateUUID();
+    const client = initSupabaseClient(newProfileId);
     if (!client) throw new Error('Supabase not configured');
     
     // Create profile
     const { data: profile, error: profileErr } = await client
         .from('bft_profiles')
-        .insert([{}])
+        .insert([{ id: newProfileId }])
         .select()
         .single();
         
