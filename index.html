@@ -458,7 +458,7 @@
                             <span class="setting-description" style="margin: 0;">Perfil: <strong id="sync-profile-id">—</strong></span>
                         </div>
                         <div class="setting-actions" style="margin-top: 8px;">
-                            <button id="share-profile-btn" class="btn btn-secondary">🔗 Compartir Perfil</button>
+                            <button id="share-profile-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.openShareModal()">🔗 Compartir Perfil</button>
                             <button id="force-push-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.forcePushToRemote()">🔄 Forzar Sync</button>
                             <button id="disconnect-sync" class="btn btn-danger">Desconectar</button>
                         </div>

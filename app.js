@@ -3822,28 +3822,25 @@ class FeedingTracker {
         }
     }
 
-    async handleRealtimeSettingsChange(payload) {
-        try {
-            const settings = await BftSync.pullSettings(this.currentProfileId, this.currentBabyId);
-            if (settings) {
-                this.applyRemoteSettings(settings);
-            }
-        } catch (e) {
-            console.error('Settings sync error:', e);
-        }
-    }
-
-    // ============= SYNC: Share & Join =============
-
     openShareModal() {
         if (!this.currentProfileId) {
-            alert('No hay perfil sincronizado. Configura Supabase primero.');
-            return;
+            this.currentProfileId = BftSync.getProfileId();
         }
-        
+        if (!this.currentProfileId) {
+            // Generate a local profile UUID if none exists
+            const newId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+                ? crypto.randomUUID() 
+                : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                    const r = Math.random() * 16 | 0;
+                    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+                });
+            BftSync.setProfileId(newId);
+            this.currentProfileId = newId;
+        }
+
         const config = BftSync.getSupabaseConfig();
         let shareUrl = `${window.location.origin}${window.location.pathname}?profile=${this.currentProfileId}`;
-        
+
         if (config && config.url && config.anonKey) {
             shareUrl += `&url=${encodeURIComponent(config.url)}&key=${encodeURIComponent(config.anonKey)}`;
         }
