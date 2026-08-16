@@ -3901,6 +3901,19 @@ class FeedingTracker {
         }
     }
 
+    async copyShareCode() {
+        const codeEl = document.getElementById('share-code');
+        const code = codeEl ? codeEl.textContent : '';
+        if (!code || code === '—') return;
+
+        try {
+            await navigator.clipboard.writeText(code);
+            alert('✅ ¡Código copiado al portapapeles!');
+        } catch {
+            alert('No se pudo copiar automáticamente. Por favor, selecciona el código manualmente.');
+        }
+    }
+
     async joinProfile() {
         const code = document.getElementById('join-code-input')?.value?.trim();
         if (!BftSync.isValidUUID(code)) {

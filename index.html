@@ -849,14 +849,17 @@
                     <label>Enlace para compartir</label>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="share-link" readonly class="setting-input" style="margin-bottom: 0; font-size: 12px; width: 0; flex: 1; min-width: 0;">
-                        <button class="btn btn-secondary" style="white-space: nowrap;" onclick="window.tracker && window.tracker.copyShareLink()">Copiar</button>
+                        <button type="button" class="btn btn-secondary" style="white-space: nowrap;" onclick="window.tracker && window.tracker.copyShareLink()">Copiar Enlace</button>
                     </div>
-                    <button id="share-api-btn" class="btn btn-primary" onclick="window.tracker && window.tracker.shareViaApi()" style="display: none; width: 100%; margin-top: 8px;">📲 Compartir en otra App</button>
+                    <button type="button" id="share-api-btn" class="btn btn-primary" onclick="window.tracker && window.tracker.shareViaApi()" style="display: none; width: 100%; margin-top: 8px;">📲 Compartir en otra App</button>
                 </div>
                 <div class="form-group">
                     <label>Código del perfil</label>
-                    <div class="share-code-display">
-                        <code id="share-code" style="font-size: 11px; word-break: break-all;">—</code>
+                    <div style="display: flex; gap: 8px;">
+                        <div class="share-code-display" style="margin-bottom: 0; flex: 1; min-width: 0;">
+                            <code id="share-code" style="font-size: 11px; word-break: break-all;">—</code>
+                        </div>
+                        <button type="button" class="btn btn-secondary" style="white-space: nowrap;" onclick="window.tracker && window.tracker.copyShareCode()">Copiar Código</button>
                     </div>
                     <p class="setting-description">Comparte este código con quien quieras que acceda a los datos.</p>
                 </div>
