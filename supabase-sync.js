@@ -604,6 +604,20 @@ async function deleteAllData(profileId) {
     if (settingsErr) throw settingsErr;
 }
 
+async function fetchRecordCount(profileId) {
+    if (!isValidUUID(profileId)) return 0;
+    const client = initSupabaseClient(profileId);
+    if (!client) return 0;
+    
+    const { count, error } = await client
+        .from('bft_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile_id', profileId);
+        
+    if (error) throw error;
+    return count || 0;
+}
+
 // ====== EXPORT ======
 window.BftSync = {
     getSupabaseConfig,
@@ -632,6 +646,7 @@ window.BftSync = {
     
     pullData,
     pullSettings,
+    fetchRecordCount,
     
     pushSettings,
     

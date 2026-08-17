@@ -4061,6 +4061,7 @@ class FeedingTracker {
         this.updateDailyProgressDisplay();
         this.updateStats('today').catch(console.warn);
         this.updateGraphs('today').catch(console.warn);
+        this.refreshSyncTelemetry().catch(console.warn);
     }
 
     // ============= SYNC: Realtime Handlers =============
@@ -4406,6 +4407,112 @@ class FeedingTracker {
         } else {
             if (connectSection) connectSection.classList.remove('hidden');
             if (connectedSection) connectedSection.classList.add('hidden');
+        }
+
+        this.refreshSyncTelemetry();
+    }
+
+    recordLocalChange() {
+        this.lastLocalChangeTimestamp = new Date().toISOString();
+        localStorage.setItem('bft_last_local_change', this.lastLocalChangeTimestamp);
+        this.refreshSyncTelemetry();
+    }
+
+    recordSyncTransaction() {
+        this.lastSyncTransactionTimestamp = new Date().toISOString();
+        localStorage.setItem('bft_last_sync_tx', this.lastSyncTransactionTimestamp);
+        this.refreshSyncTelemetry();
+    }
+
+    async refreshSyncTelemetry() {
+        const countLocalEl = document.getElementById('count-local-records');
+        const countRemoteEl = document.getElementById('count-remote-records');
+        const countBackupEl = document.getElementById('count-backup-records');
+        const badgeEl = document.getElementById('sync-live-badge');
+        const tsLocalEl = document.getElementById('ts-last-local');
+        const tsSyncEl = document.getElementById('ts-last-sync');
+        const tsBackupEl = document.getElementById('ts-last-backup');
+
+        const totalLocal = (this.feedings?.length || 0) +
+                           (this.diapers?.length || 0) +
+                           (this.measurements?.length || 0) +
+                           (this.medicines?.length || 0) +
+                           (this.temperatures?.length || 0) +
+                           (this.appointments?.length || 0) +
+                           (this.journalEntries?.length || 0);
+
+        if (countLocalEl) countLocalEl.textContent = totalLocal.toLocaleString();
+
+        let totalRemote = null;
+
+        if (this.syncReady && this.currentProfileId) {
+            try {
+                totalRemote = await BftSync.fetchRecordCount(this.currentProfileId);
+                if (countRemoteEl) countRemoteEl.textContent = totalRemote.toLocaleString();
+            } catch (e) {
+                console.warn('Could not fetch remote count:', e);
+                if (countRemoteEl) countRemoteEl.textContent = 'Error';
+            }
+        } else {
+            if (countRemoteEl) countRemoteEl.textContent = '—';
+        }
+
+        let backupCount = 0;
+        let backupTimestamp = null;
+        try {
+            const rawSnap = localStorage.getItem('bft_idb_snapshot');
+            if (rawSnap) {
+                const snap = JSON.parse(rawSnap);
+                backupTimestamp = snap.timestamp ? new Date(snap.timestamp) : null;
+                backupCount = (snap.feedings?.length || 0) +
+                              (snap.diapers?.length || 0) +
+                              (snap.measurements?.length || 0) +
+                              (snap.medicines?.length || 0) +
+                              (snap.temperatures?.length || 0) +
+                              (snap.appointments?.length || 0) +
+                              (snap.journal?.length || 0);
+            }
+        } catch(e) {}
+
+        if (countBackupEl) {
+            countBackupEl.textContent = backupCount > 0 ? backupCount.toLocaleString() : '—';
+        }
+
+        const formatTs = (tsStr) => {
+            if (!tsStr) return 'Sin registros';
+            try {
+                const d = new Date(tsStr);
+                if (isNaN(d.getTime())) return '—';
+                return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch (e) {
+                return '—';
+            }
+        };
+
+        const lastLocal = this.lastLocalChangeTimestamp || localStorage.getItem('bft_last_local_change');
+        const lastSync = this.lastSyncTransactionTimestamp || localStorage.getItem('bft_last_sync_tx');
+
+        if (tsLocalEl) tsLocalEl.textContent = formatTs(lastLocal);
+        if (tsSyncEl) tsSyncEl.textContent = formatTs(lastSync);
+        if (tsBackupEl) tsBackupEl.textContent = formatTs(backupTimestamp);
+
+        if (!badgeEl) return;
+
+        if (!this.syncReady || !this.currentProfileId) {
+            badgeEl.textContent = '⚪ Modo Local';
+            badgeEl.style.background = 'rgba(0,0,0,0.06)';
+            badgeEl.style.color = 'var(--text-color)';
+        } else if (totalRemote !== null) {
+            const diff = Math.abs(totalLocal - totalRemote);
+            if (diff === 0) {
+                badgeEl.textContent = '🟢 Sincronizado (100%)';
+                badgeEl.style.background = 'rgba(16, 185, 129, 0.15)';
+                badgeEl.style.color = '#047857';
+            } else {
+                badgeEl.textContent = `🟡 ${diff} reg. de diferencia`;
+                badgeEl.style.background = 'rgba(245, 158, 11, 0.15)';
+                badgeEl.style.color = '#b45309';
+            }
         }
     }
 

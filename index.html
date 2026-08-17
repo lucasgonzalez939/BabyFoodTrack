@@ -500,6 +500,44 @@
                         </div>
                         <p class="setting-description">Sincronización activa. Puedes fusionar datos, o forzar sobrescritura en la nube o en tu dispositivo.</p>
                     </div>
+
+                    <!-- Live Sync Status & Counters Dashboard Card -->
+                    <div id="sync-telemetry-card" class="sync-telemetry-card" style="margin-top: 14px; padding: 14px; background: rgba(0, 0, 0, 0.03); border-radius: 12px; border: 1px solid rgba(0, 0, 0, 0.08);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
+                            <span style="font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
+                                📊 Estado e Historial de Sincronización
+                            </span>
+                            <span id="sync-live-badge" class="sync-badge" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: 600; background: rgba(0,0,0,0.06); color: var(--text-color);">⚪ Desconectado</span>
+                        </div>
+
+                        <div class="telemetry-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; text-align: center;">
+                            <div style="background: var(--card-background, #fff); padding: 8px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);">
+                                <div style="font-size: 0.75rem; opacity: 0.75;">📱 Local</div>
+                                <div id="count-local-records" style="font-size: 1.25rem; font-weight: 700; color: var(--primary-color);">0</div>
+                                <div style="font-size: 0.65rem; opacity: 0.6;">Registros</div>
+                            </div>
+                            <div style="background: var(--card-background, #fff); padding: 8px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);">
+                                <div style="font-size: 0.75rem; opacity: 0.75;">☁️ Nube</div>
+                                <div id="count-remote-records" style="font-size: 1.25rem; font-weight: 700; color: #2563eb;">—</div>
+                                <div style="font-size: 0.65rem; opacity: 0.6;">Supabase</div>
+                            </div>
+                            <div style="background: var(--card-background, #fff); padding: 8px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);">
+                                <div style="font-size: 0.75rem; opacity: 0.75;">💾 Respaldo</div>
+                                <div id="count-backup-records" style="font-size: 1.25rem; font-weight: 700; color: #059669;">—</div>
+                                <div style="font-size: 0.65rem; opacity: 0.6;">Snapshot</div>
+                            </div>
+                        </div>
+
+                        <div class="telemetry-timestamps" style="font-size: 0.75rem; display: flex; flex-direction: column; gap: 4px; opacity: 0.85;">
+                            <div>⏱️ <strong>Último cambio local:</strong> <span id="ts-last-local">—</span></div>
+                            <div>🔄 <strong>Última transacción sync:</strong> <span id="ts-last-sync">—</span></div>
+                            <div>📸 <strong>Último respaldo local:</strong> <span id="ts-last-backup">—</span></div>
+                        </div>
+
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="window.tracker && window.tracker.refreshSyncTelemetry()" style="margin-top: 10px; width: 100%; font-size: 0.8rem;">
+                            🔄 Actualizar Contadores
+                        </button>
+                    </div>
                 </div>
 
                 <div class="setting-item">
