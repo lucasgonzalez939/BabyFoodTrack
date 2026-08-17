@@ -228,6 +228,22 @@
                 </div>
             </section>
 
+            <!-- Allergen & Diet Passport Section -->
+            <section class="allergen-passport-section">
+                <div class="section-with-button">
+                    <h2>🥗 Pasaporte de Alergias y Dieta</h2>
+                </div>
+                <div class="collapsible-header" data-target="allergen-passport-container">
+                    <h3><span>🥦</span> Estado de Alimentos e Hidratación</h3>
+                    <span class="collapsible-toggle">▼</span>
+                </div>
+                <div id="allergen-passport-container" class="collapsible-content">
+                    <div id="allergen-passport-display">
+                        <!-- Passport content generated dynamically in app.js -->
+                    </div>
+                </div>
+            </section>
+
             <!-- Journal -->
             <section class="journal-section">
                 <div class="section-with-button">
@@ -384,9 +400,27 @@
                 </div>
 
                 <div class="setting-item">
-                    <label for="next-feeding-interval">Intervalo Predeterminado (horas)</label>
+                    <label for="daily-solid-target">Meta Diaria de Comidas Sólidas (comidas/día)</label>
+                    <input type="number" id="daily-solid-target" class="setting-input" min="0" max="6" step="1" value="2" placeholder="Ej: 2">
+                    <p class="setting-description">Objetivo diario de comidas sólidas (almuerzo, cena, etc.)</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="daily-water-target">Meta Diaria de Agua (ml)</label>
+                    <input type="number" id="daily-water-target" class="setting-input" min="0" max="1000" step="10" value="150" placeholder="Ej: 150">
+                    <p class="setting-description">Objetivo diario de hidratación con agua libre</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="next-feeding-interval">Intervalo de Tomas de Leche (horas)</label>
                     <input type="number" id="next-feeding-interval" class="setting-input" min="1" max="12" step="0.5" value="3.5">
-                    <p class="setting-description">Tiempo predeterminado hasta la próxima toma</p>
+                    <p class="setting-description">Tiempo predeterminado hasta la próxima toma de leche</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="next-solid-interval">Intervalo de Comidas Sólidas (horas)</label>
+                    <input type="number" id="next-solid-interval" class="setting-input" min="1" max="12" step="0.5" value="4.0">
+                    <p class="setting-description">Tiempo predeterminado entre comidas sólidas</p>
                 </div>
 
                 <div class="setting-item">
@@ -524,7 +558,16 @@
                     <div class="type-selector">
                         <button type="button" class="type-btn active" data-type="bottle">🍼 Biberón</button>
                         <button type="button" class="type-btn" data-type="breast">🤱 Pecho</button>
-                        <button type="button" class="type-btn" data-type="complementary">🥣 Complementaria</button>
+                        <button type="button" class="type-btn" data-type="complementary">🥣 Sólidos</button>
+                        <button type="button" class="type-btn" data-type="water">💧 Agua</button>
+                    </div>
+                </div>
+
+                <div class="form-group" id="bottle-subtype-group">
+                    <label>Tipo de líquido en biberón:</label>
+                    <div class="subtype-selector" style="display: flex; gap: 8px;">
+                        <button type="button" class="type-btn active" data-bottle-type="formula" style="flex: 1; font-size: 13px;">🍼 Fórmula</button>
+                        <button type="button" class="type-btn" data-bottle-type="breastmilk" style="flex: 1; font-size: 13px;">🤱 Leche Materna</button>
                     </div>
                 </div>
 

@@ -15,6 +15,9 @@ class FeedingTracker {
         this.darkMode = false;
         this.defaultInterval = 3.5; // Default hours between feedings
         this.dailyMilkTarget = 0;
+        this.dailySolidTarget = 2; // Default 2 meals/day
+        this.defaultSolidInterval = 4.0; // Default hours between solid meals
+        this.dailyWaterTarget = 150; // Default 150 ml water/day
         this.birthDate = null;
         this.notificationsEnabled = false;
         // Baby temperature thresholds in Celsius.
@@ -128,13 +131,24 @@ class FeedingTracker {
         });
 
         // Feeding type selector
-        document.querySelectorAll('.type-btn').forEach(btn => {
+        document.querySelectorAll('#feeding-form .type-selector .type-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
-                document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('#feeding-form .type-selector .type-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.currentFeedingType = btn.dataset.type;
                 this.toggleFeedingInputs();
+            });
+        });
+
+        // Bottle subtype selector
+        this.currentBottleSubtype = 'formula';
+        document.querySelectorAll('[data-bottle-type]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('[data-bottle-type]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.currentBottleSubtype = btn.dataset.bottleType;
             });
         });
 
@@ -482,6 +496,32 @@ class FeedingTracker {
             this.updateDailyProgressDisplay();
         });
 
+        const solidTargetInput = document.getElementById('daily-solid-target');
+        if (solidTargetInput) {
+            solidTargetInput.addEventListener('change', async (e) => {
+                this.dailySolidTarget = parseInt(e.target.value) || 0;
+                await this.saveToStorage();
+                this.updateDailyProgressDisplay();
+            });
+        }
+
+        const solidIntervalInput = document.getElementById('next-solid-interval');
+        if (solidIntervalInput) {
+            solidIntervalInput.addEventListener('change', async (e) => {
+                this.defaultSolidInterval = parseFloat(e.target.value) || 4.0;
+                await this.saveToStorage();
+            });
+        }
+
+        const waterTargetInput = document.getElementById('daily-water-target');
+        if (waterTargetInput) {
+            waterTargetInput.addEventListener('change', async (e) => {
+                this.dailyWaterTarget = parseInt(e.target.value) || 0;
+                await this.saveToStorage();
+                this.updateDailyProgressDisplay();
+            });
+        }
+
         // Birth date change
         document.getElementById('birth-date').addEventListener('change', async (e) => {
             this.birthDate = e.target.value;
@@ -536,21 +576,34 @@ class FeedingTracker {
         const amountGroup = document.getElementById('amount-group');
         const durationGroup = document.getElementById('duration-group');
         const complementaryGroup = document.getElementById('complementary-group');
+        const bottleSubtypeGroup = document.getElementById('bottle-subtype-group');
+        const amountLabel = amountGroup ? amountGroup.querySelector('label') : null;
 
         if (this.currentFeedingType === 'bottle') {
-            amountGroup.classList.remove('hidden');
-            durationGroup.classList.add('hidden');
-            complementaryGroup.classList.add('hidden');
+            if (amountGroup) amountGroup.classList.remove('hidden');
+            if (amountLabel) amountLabel.textContent = 'Cantidad de leche (ml):';
+            if (durationGroup) durationGroup.classList.add('hidden');
+            if (complementaryGroup) complementaryGroup.classList.add('hidden');
+            if (bottleSubtypeGroup) bottleSubtypeGroup.classList.remove('hidden');
             document.getElementById('feeding-duration').value = '';
         } else if (this.currentFeedingType === 'breast') {
-            amountGroup.classList.add('hidden');
-            durationGroup.classList.remove('hidden');
-            complementaryGroup.classList.add('hidden');
+            if (amountGroup) amountGroup.classList.add('hidden');
+            if (durationGroup) durationGroup.classList.remove('hidden');
+            if (complementaryGroup) complementaryGroup.classList.add('hidden');
+            if (bottleSubtypeGroup) bottleSubtypeGroup.classList.add('hidden');
             document.getElementById('milk-amount').value = '';
+        } else if (this.currentFeedingType === 'water') {
+            if (amountGroup) amountGroup.classList.remove('hidden');
+            if (amountLabel) amountLabel.textContent = 'Cantidad de agua libre (ml):';
+            if (durationGroup) durationGroup.classList.add('hidden');
+            if (complementaryGroup) complementaryGroup.classList.add('hidden');
+            if (bottleSubtypeGroup) bottleSubtypeGroup.classList.add('hidden');
+            document.getElementById('feeding-duration').value = '';
         } else {
-            amountGroup.classList.add('hidden');
-            durationGroup.classList.add('hidden');
-            complementaryGroup.classList.remove('hidden');
+            if (amountGroup) amountGroup.classList.add('hidden');
+            if (durationGroup) durationGroup.classList.add('hidden');
+            if (complementaryGroup) complementaryGroup.classList.remove('hidden');
+            if (bottleSubtypeGroup) bottleSubtypeGroup.classList.add('hidden');
             document.getElementById('milk-amount').value = '';
             document.getElementById('feeding-duration').value = '';
         }
@@ -699,6 +752,8 @@ class FeedingTracker {
             const activePeriod = document.querySelector('.filter-btn.active').dataset.period;
             await this.updateStats(activePeriod);
             await this.updateGraphs(activePeriod);
+        } else if (tabName === 'health') {
+            this.renderAllergenPassport();
         }
     }
 
@@ -782,7 +837,12 @@ class FeedingTracker {
     // Feeding Management
     async addFeeding() {
         const timeInput = document.getElementById('feeding-time').value;
-        const interval = this.defaultInterval; // Use default interval from settings
+        let interval = this.defaultInterval;
+        if (this.currentFeedingType === 'complementary') {
+            interval = this.defaultSolidInterval || 4.0;
+        } else if (this.currentFeedingType === 'water') {
+            interval = 2.0;
+        }
 
         const feeding = {
             time: new Date(timeInput).toISOString(),
@@ -795,6 +855,14 @@ class FeedingTracker {
             const amount = parseInt(document.getElementById('milk-amount').value);
             if (!amount || amount <= 0) {
                 alert('Por favor ingresa una cantidad válida');
+                return;
+            }
+            feeding.amount = amount;
+            feeding.bottleSubtype = this.currentBottleSubtype || 'formula';
+        } else if (this.currentFeedingType === 'water') {
+            const amount = parseInt(document.getElementById('milk-amount').value);
+            if (!amount || amount <= 0) {
+                alert('Por favor ingresa una cantidad de agua válida');
                 return;
             }
             feeding.amount = amount;
@@ -931,11 +999,15 @@ class FeedingTracker {
             let icon = '🍼';
 
             if (feeding.type === 'bottle') {
-                details = `${feeding.amount} ml`;
+                const subTypeLabel = feeding.bottleSubtype === 'breastmilk' ? 'Leche Materna' : 'Fórmula';
+                details = `${feeding.amount} ml <span class="subtype-badge">${subTypeLabel}</span>`;
                 icon = '🍼';
             } else if (feeding.type === 'breast') {
                 details = `${feeding.duration} min (pecho)`;
                 icon = '🤱';
+            } else if (feeding.type === 'water') {
+                details = `${feeding.amount} ml (agua libre)`;
+                icon = '💧';
             } else {
                 details = `${feeding.food || 'Alimento'} • ${feeding.grams || 0} g`;
                 icon = '🥣';
@@ -2029,34 +2101,193 @@ class FeedingTracker {
         const container = document.getElementById('daily-progress-info');
         if (!container) return;
 
-        if (this.dailyMilkTarget <= 0) {
-            container.style.display = 'none';
-            return;
-        }
-
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        
-        const todayFeedings = this.feedings.filter(f => {
-            return new Date(f.timestamp) >= startOfToday && f.type === 'bottle';
-        });
 
-        const totalAmount = todayFeedings.reduce((sum, f) => sum + (f.amount || 0), 0);
-        const remaining = Math.max(0, this.dailyMilkTarget - totalAmount);
-        const percent = Math.min(100, Math.round((totalAmount / this.dailyMilkTarget) * 100));
+        const todayFeedings = this.feedings.filter(f => new Date(f.timestamp) >= startOfToday);
+
+        const milkFeedings = todayFeedings.filter(f => f.type === 'bottle');
+        const totalMilk = milkFeedings.reduce((sum, f) => sum + (f.amount || 0), 0);
+        const milkPercent = this.dailyMilkTarget > 0 ? Math.min(100, Math.round((totalMilk / this.dailyMilkTarget) * 100)) : 0;
+
+        const solidFeedings = todayFeedings.filter(f => f.type === 'complementary' || f.food);
+        const totalSolidMeals = solidFeedings.length;
+        const totalSolidGrams = solidFeedings.reduce((sum, f) => sum + (f.grams || 0), 0);
+        const solidPercent = this.dailySolidTarget > 0 ? Math.min(100, Math.round((totalSolidMeals / this.dailySolidTarget) * 100)) : 0;
+
+        const waterFeedings = todayFeedings.filter(f => f.type === 'water');
+        const totalWater = waterFeedings.reduce((sum, f) => sum + (f.amount || 0), 0);
+        const waterPercent = this.dailyWaterTarget > 0 ? Math.min(100, Math.round((totalWater / this.dailyWaterTarget) * 100)) : 0;
 
         container.style.display = 'block';
         container.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                <span><strong>Progreso Diario:</strong> ${totalAmount} / ${this.dailyMilkTarget} ml</span>
-                <span>${percent}%</span>
+            <div style="font-weight: 700; text-align: center; margin-bottom: 0.5rem; color: var(--text-primary);">📊 Progreso Nutricional de Hoy</div>
+            <div class="progress-grid-triple">
+                <div class="progress-item-mini">
+                    <div class="progress-item-title">🥛 Leche</div>
+                    <div class="progress-item-val">${totalMilk} ml</div>
+                    <div class="progress-item-sub">${this.dailyMilkTarget > 0 ? `${milkPercent}% de ${this.dailyMilkTarget}ml` : 'Sin meta'}</div>
+                </div>
+                <div class="progress-item-mini">
+                    <div class="progress-item-title">🥣 Sólidos</div>
+                    <div class="progress-item-val">${totalSolidMeals} com.</div>
+                    <div class="progress-item-sub">${totalSolidGrams}g (${solidPercent}% de ${this.dailySolidTarget})</div>
+                </div>
+                <div class="progress-item-mini">
+                    <div class="progress-item-title">💧 Agua</div>
+                    <div class="progress-item-val">${totalWater} ml</div>
+                    <div class="progress-item-sub">${this.dailyWaterTarget > 0 ? `${waterPercent}% de ${this.dailyWaterTarget}ml` : 'Libre'}</div>
+                </div>
             </div>
-            <div class="progress-bar-container" style="height: 8px; margin: 0;">
-                <div class="progress-bar" style="width: ${percent}%"></div>
+        `;
+    }
+
+    renderAllergenPassport() {
+        const container = document.getElementById('allergen-passport-display');
+        if (!container) return;
+
+        const complementaryFeedings = this.feedings.filter(f => f.type === 'complementary' || f.food);
+
+        if (complementaryFeedings.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <p>No se han registrado alimentos sólidos aún. Al registrar alimentos en la pestaña "Registro", la matriz de alergias y dieta se generará automáticamente.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const foodMap = new Map();
+
+        complementaryFeedings.forEach(f => {
+            const foodName = this.normalizeCatalogFoodName(f.food || 'Alimento');
+            if (!foodName) return;
+
+            if (!foodMap.has(foodName)) {
+                foodMap.set(foodName, {
+                    name: foodName,
+                    count: 0,
+                    maxReaction: 'normal',
+                    allergens: new Set(),
+                    lastDate: f.timestamp
+                });
+            }
+
+            const entry = foodMap.get(foodName);
+            entry.count++;
+            if (new Date(f.timestamp) > new Date(entry.lastDate)) {
+                entry.lastDate = f.timestamp;
+            }
+
+            const reactionSeverity = { 'normal': 0, 'mild': 1, 'moderate': 2, 'severe': 3 };
+            const currentSev = reactionSeverity[entry.maxReaction] || 0;
+            const newSev = reactionSeverity[f.reaction] || 0;
+            if (newSev > currentSev) {
+                entry.maxReaction = f.reaction;
+            }
+
+            if (Array.isArray(f.allergens)) {
+                f.allergens.forEach(a => entry.allergens.add(a));
+            }
+        });
+
+        const safeFoods = [];
+        const testingFoods = [];
+        const reactionFoods = [];
+
+        foodMap.forEach(item => {
+            if (item.maxReaction !== 'normal') {
+                reactionFoods.push(item);
+            } else if (item.count >= 3) {
+                safeFoods.push(item);
+            } else {
+                testingFoods.push(item);
+            }
+        });
+
+        // Diaper constipation / diarrhea correlation with hydration
+        const now = new Date();
+        const past7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const recentDiapers = this.diapers.filter(d => new Date(d.timestamp) >= past7Days);
+        const hardConstipatedCount = recentDiapers.filter(d => 
+            (d.notes && (d.notes.toLowerCase().includes('constipad') || d.notes.toLowerCase().includes('estreñid') || d.notes.toLowerCase().includes('duro')))
+        ).length;
+        const diarrheaCount = recentDiapers.filter(d => 
+            (d.notes && (d.notes.toLowerCase().includes('diarre') || d.notes.toLowerCase().includes('blando')))
+        ).length;
+
+        const recentWaterFeedings = this.feedings.filter(f => f.type === 'water' && new Date(f.timestamp) >= past7Days);
+        const avgDailyWater = Math.round(recentWaterFeedings.reduce((sum, f) => sum + (f.amount || 0), 0) / 7);
+
+        let hydrationInsightHtml = '';
+        if (hardConstipatedCount > 0) {
+            hydrationInsightHtml = `
+                <div class="hydration-insight-card">
+                    <div class="hydration-insight-header">💧 Alerta de Hidratación y Digestión</div>
+                    <p>Se registraron <strong>${hardConstipatedCount} episodios de constipación/evacuación dura</strong> en los últimos 7 días. El promedio de agua registrada es de <strong>${avgDailyWater} ml/día</strong> (meta: ${this.dailyWaterTarget} ml/día). Una hidratación constante apoya la transición a sólidos.</p>
+                </div>
+            `;
+        } else if (diarrheaCount > 0) {
+            hydrationInsightHtml = `
+                <div class="hydration-insight-card">
+                    <div class="hydration-insight-header">💧 Observación Digestiva</div>
+                    <p>Se registraron <strong>${diarrheaCount} deposiciones blandas/diarrea</strong> esta semana. Asegura una hidratación constante (promedio actual: <strong>${avgDailyWater} ml/día</strong>).</p>
+                </div>
+            `;
+        } else {
+            hydrationInsightHtml = `
+                <div class="hydration-insight-card">
+                    <div class="hydration-insight-header">💧 Estado de Hidratación</div>
+                    <p>Promedio de agua consumida esta semana: <strong>${avgDailyWater} ml/día</strong> (Meta recomendada: ${this.dailyWaterTarget} ml/día).</p>
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <div class="allergen-passport-grid">
+                <div class="allergen-card-box safe">
+                    <div class="allergen-card-header">
+                        <span>🟢 Probados y Seguros (${safeFoods.length})</span>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Alimentos probados 3+ veces sin reacción observada:</p>
+                    <div>
+                        ${safeFoods.length > 0 ? safeFoods.map(f => `
+                            <span class="allergen-food-tag safe">
+                                ${f.name} (${f.count} tomas)
+                            </span>
+                        `).join('') : '<span style="font-size: 0.85rem; color: var(--text-secondary);">Ninguno aún</span>'}
+                    </div>
+                </div>
+
+                <div class="allergen-card-box testing">
+                    <div class="allergen-card-header">
+                        <span>🟡 En Evaluación (${testingFoods.length})</span>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Introducidos recientemente (1-2 tomas, en observación):</p>
+                    <div>
+                        ${testingFoods.length > 0 ? testingFoods.map(f => `
+                            <span class="allergen-food-tag testing">
+                                ${f.name} (${f.count}/3 tomas)
+                            </span>
+                        `).join('') : '<span style="font-size: 0.85rem; color: var(--text-secondary);">Ninguno</span>'}
+                    </div>
+                </div>
+
+                <div class="allergen-card-box reaction">
+                    <div class="allergen-card-header">
+                        <span>🔴 Reacciones Observadas (${reactionFoods.length})</span>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Alimentos que presentaron síntomas (alérgenos/sensibilidad):</p>
+                    <div>
+                        ${reactionFoods.length > 0 ? reactionFoods.map(f => `
+                            <span class="allergen-food-tag reaction">
+                                ⚠️ ${f.name} (${this.getReactionLabel(f.maxReaction)})
+                            </span>
+                        `).join('') : '<span style="font-size: 0.85rem; color: var(--text-secondary);">Sin reacciones registradas 🎉</span>'}
+                    </div>
+                </div>
             </div>
-            <div style="font-size: 0.85rem; margin-top: 5px; text-align: right;">
-                ${remaining > 0 ? `Faltan <strong>${remaining} ml</strong>` : '¡Meta alcanzada! 🎉'}
-            </div>
+            ${hydrationInsightHtml}
         `;
     }
 
@@ -2740,6 +2971,9 @@ class FeedingTracker {
             darkMode: this.darkMode,
             defaultInterval: this.defaultInterval,
             dailyMilkTarget: this.dailyMilkTarget,
+            dailySolidTarget: this.dailySolidTarget,
+            defaultSolidInterval: this.defaultSolidInterval,
+            dailyWaterTarget: this.dailyWaterTarget,
             birthDate: this.birthDate,
             notificationsEnabled: this.notificationsEnabled,
             complementaryCatalog: this.complementaryCatalog,
@@ -2765,13 +2999,12 @@ class FeedingTracker {
 
     exportCSV() {
         const feedingsCSV = this.feedings.map(f => {
-            const type = f.type === 'bottle' ? 'Biberón' : (f.type === 'breast' ? 'Pecho' : 'Complementaria');
-            const amount = f.type === 'bottle' ? f.amount : '';
+            const type = f.type === 'bottle' ? 'Biberón' : (f.type === 'breast' ? 'Pecho' : (f.type === 'water' ? 'Agua' : 'Complementaria'));
+            const amount = (f.type === 'bottle' || f.type === 'water') ? f.amount : '';
             const duration = f.type === 'breast' ? f.duration : '';
             const complementary = f.type === 'complementary'
                 ? `Alimento:${f.food || ''};Gramos:${f.grams || ''};Reaccion:${this.getReactionLabel(f.reaction || 'normal')};Alergenos:${Array.isArray(f.allergens) ? f.allergens.join('|') : ''}`
-                : '';
-            const notes = f.type === 'complementary' ? (f.notes || '') : '';
+                : (f.bottleSubtype ? `Subtipo:${f.bottleSubtype}` : '');
             return `ALIMENTACION,${this.csvCell(f.timestamp)},${this.csvCell(type)},${this.csvCell(amount)},${this.csvCell(duration)},${this.csvCell(complementary || notes)},${this.csvCell(f.timezone)}`;
         }).join('\n');
 
@@ -2806,9 +3039,17 @@ class FeedingTracker {
             return `SALUD_DIARIO,${this.csvCell(j.timestamp)},${this.csvCell(detail)},${this.csvCell(tags)},,${this.csvCell(j.description || '')},${this.csvCell(j.timezone)}`;
         }).join('\n');
 
+        const configCSV = [
+            this.birthDate ? `CONFIGURACION,,BIRTH_DATE,${this.csvCell(this.birthDate)},,,` : '',
+            this.defaultInterval ? `CONFIGURACION,,DEFAULT_INTERVAL,${this.csvCell(this.defaultInterval)},,,` : '',
+            this.dailyMilkTarget ? `CONFIGURACION,,DAILY_MILK_TARGET,${this.csvCell(this.dailyMilkTarget)},,,` : '',
+            this.timezone ? `CONFIGURACION,,TIMEZONE,${this.csvCell(this.timezone)},,,` : ''
+        ].filter(Boolean).join('\n');
+
         const csvContent = "data:text/csv;charset=utf-8," + 
             "TIPO,FECHA,DETALLE1,DETALLE2,DETALLE3,NOTAS,ZONA_HORARIA\n" + 
             [
+                configCSV,
                 feedingsCSV,
                 diapersCSV,
                 measurementsCSV,
@@ -2875,6 +3116,7 @@ class FeedingTracker {
                 const importedTemperatures = [];
                 const importedAppointments = [];
                 const importedJournalEntries = [];
+                const importedConfig = {};
 
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i].trim();
@@ -2883,10 +3125,21 @@ class FeedingTracker {
                     const values = this.parseCsvLine(line);
                     const recordType = values[0];
                     
-                    if (recordType === 'ALIMENTACION') {
+                    if (recordType === 'CONFIGURACION') {
+                        const key = values[2];
+                        const val = values[3];
+                        if (key === 'BIRTH_DATE' && val) importedConfig.birthDate = val;
+                        if (key === 'DEFAULT_INTERVAL' && val) importedConfig.defaultInterval = parseFloat(val);
+                        if (key === 'DAILY_MILK_TARGET' && val) importedConfig.dailyMilkTarget = parseInt(val);
+                        if (key === 'DAILY_SOLID_TARGET' && val) importedConfig.dailySolidTarget = parseInt(val);
+                        if (key === 'DEFAULT_SOLID_INTERVAL' && val) importedConfig.defaultSolidInterval = parseFloat(val);
+                        if (key === 'DAILY_WATER_TARGET' && val) importedConfig.dailyWaterTarget = parseInt(val);
+                        if (key === 'TIMEZONE' && val) importedConfig.timezone = val;
+                    } else if (recordType === 'ALIMENTACION') {
                         let feedingType = 'breast';
                         if (values[2] === 'Biberón') feedingType = 'bottle';
-                        if (values[2] === 'Complementaria') feedingType = 'complementary';
+                        if (values[2] === 'Complementaria' || values[2] === 'Sólidos') feedingType = 'complementary';
+                        if (values[2] === 'Agua') feedingType = 'water';
 
                         const feeding = {
                             time: values[1],
@@ -2896,6 +3149,11 @@ class FeedingTracker {
                             duration: values[4] ? parseInt(values[4]) : null,
                             timezone: values[6] || values[5] || this.timezone
                         };
+
+                        if (values[5] && values[5].includes('Subtipo:')) {
+                            const sub = values[5].split('Subtipo:')[1]?.trim();
+                            if (sub) feeding.bottleSubtype = sub;
+                        }
 
                         if (feedingType === 'complementary' && values[5]) {
                             const detailsMap = {};
@@ -3049,9 +3307,10 @@ class FeedingTracker {
                         this.saveToLocalStorage();
                     }
 
+                    await this.applyAndSaveImportedSettings(importedConfig);
                     await this.refreshAllViewsAfterImport();
                     if (this.syncReady) {
-                        await this.forcePushToRemote();
+                        await this.syncImportedDataToRemote();
                     }
                     alert('¡Importación exitosa!');
                 }
@@ -3078,6 +3337,60 @@ class FeedingTracker {
         await this.updateDiaperTodaySummary();
         await this.updateStats('today');
         await this.updateGraphs('today');
+    }
+
+    async applyAndSaveImportedSettings(payload) {
+        if (payload.timezone) this.timezone = payload.timezone;
+        if (typeof payload.darkMode === 'boolean') this.darkMode = payload.darkMode;
+        if (typeof payload.defaultInterval === 'number') this.defaultInterval = payload.defaultInterval;
+        if (typeof payload.dailyMilkTarget === 'number') this.dailyMilkTarget = payload.dailyMilkTarget;
+        if (typeof payload.dailySolidTarget === 'number') this.dailySolidTarget = payload.dailySolidTarget;
+        if (typeof payload.defaultSolidInterval === 'number') this.defaultSolidInterval = payload.defaultSolidInterval;
+        if (typeof payload.dailyWaterTarget === 'number') this.dailyWaterTarget = payload.dailyWaterTarget;
+        if (payload.birthDate) this.birthDate = payload.birthDate;
+        if (typeof payload.notificationsEnabled === 'boolean') this.notificationsEnabled = payload.notificationsEnabled;
+
+        if (Array.isArray(payload.complementaryCatalog) && payload.complementaryCatalog.length > 0) {
+            const mergedCatalog = [...new Set([...this.complementaryCatalog, ...payload.complementaryCatalog.map(i => this.normalizeCatalogFoodName(i)).filter(Boolean)])];
+            this.complementaryCatalog = mergedCatalog.sort((a, b) => a.localeCompare(b, 'es'));
+        }
+
+        if (this.useIndexedDB) {
+            if (this.timezone) await db.setMetadata('timezone', this.timezone);
+            if (typeof this.darkMode === 'boolean') await db.setMetadata('darkMode', this.darkMode);
+            if (this.defaultInterval) await db.setMetadata('defaultInterval', this.defaultInterval);
+            if (this.dailyMilkTarget) await db.setMetadata('dailyMilkTarget', this.dailyMilkTarget);
+            if (this.dailySolidTarget) await db.setMetadata('dailySolidTarget', this.dailySolidTarget);
+            if (this.defaultSolidInterval) await db.setMetadata('defaultSolidInterval', this.defaultSolidInterval);
+            if (this.dailyWaterTarget) await db.setMetadata('dailyWaterTarget', this.dailyWaterTarget);
+            if (this.birthDate) await db.setMetadata('birthDate', this.birthDate);
+            if (typeof this.notificationsEnabled === 'boolean') await db.setMetadata('notificationsEnabled', this.notificationsEnabled);
+            await db.setMetadata('complementaryCatalog', this.complementaryCatalog);
+        } else {
+            this.saveToLocalStorage();
+        }
+
+        // Update form input elements in Settings UI
+        const birthInput = document.getElementById('birth-date');
+        if (birthInput && this.birthDate) birthInput.value = this.birthDate;
+
+        const intervalInput = document.getElementById('next-feeding-interval');
+        if (intervalInput && this.defaultInterval) intervalInput.value = this.defaultInterval;
+
+        const solidIntervalInput = document.getElementById('next-solid-interval');
+        if (solidIntervalInput && this.defaultSolidInterval) solidIntervalInput.value = this.defaultSolidInterval;
+
+        const targetInput = document.getElementById('daily-milk-target');
+        if (targetInput && this.dailyMilkTarget) targetInput.value = this.dailyMilkTarget;
+
+        const solidTargetInput = document.getElementById('daily-solid-target');
+        if (solidTargetInput && this.dailySolidTarget) solidTargetInput.value = this.dailySolidTarget;
+
+        const waterTargetInput = document.getElementById('daily-water-target');
+        if (waterTargetInput && this.dailyWaterTarget) waterTargetInput.value = this.dailyWaterTarget;
+
+        const notifToggle = document.getElementById('notifications-toggle');
+        if (notifToggle && typeof this.notificationsEnabled === 'boolean') notifToggle.checked = this.notificationsEnabled;
     }
 
     importJSON(event) {
@@ -3235,28 +3548,17 @@ class FeedingTracker {
                     this.temperatures = [...importedTemperatures, ...this.temperatures].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                     this.appointments = [...importedAppointments, ...this.appointments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
                     this.journalEntries = [...importedJournalEntries, ...this.journalEntries].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-                    if (importedCatalog.length > 0) {
-                        const mergedCatalog = [...new Set([...this.complementaryCatalog, ...importedCatalog.map(i => this.normalizeCatalogFoodName(i)).filter(Boolean)])];
-                        this.complementaryCatalog = mergedCatalog.sort((a, b) => a.localeCompare(b, 'es'));
-                    }
-
-                    if (payload.timezone) this.timezone = payload.timezone;
-                    if (typeof payload.darkMode === 'boolean') this.darkMode = payload.darkMode;
-                    if (typeof payload.defaultInterval === 'number') this.defaultInterval = payload.defaultInterval;
-                    if (typeof payload.dailyMilkTarget === 'number') this.dailyMilkTarget = payload.dailyMilkTarget;
-                    if (payload.birthDate) this.birthDate = payload.birthDate;
-                    if (typeof payload.notificationsEnabled === 'boolean') this.notificationsEnabled = payload.notificationsEnabled;
-
-                    this.saveToLocalStorage();
                 }
+
+                // Always apply and persist settings from JSON payload
+                await this.applyAndSaveImportedSettings(payload);
 
                 await this.refreshAllViewsAfterImport();
                 this.renderComplementaryCatalog();
                 this.populateComplementaryFoodSelect();
                 this.applyDarkMode();
                 if (this.syncReady) {
-                    await this.forcePushToRemote();
+                    await this.syncImportedDataToRemote();
                 }
                 alert('¡Importación JSON exitosa!');
             } catch (error) {
@@ -3277,6 +3579,9 @@ class FeedingTracker {
             await db.setMetadata('darkMode', this.darkMode);
             await db.setMetadata('defaultInterval', this.defaultInterval);
             await db.setMetadata('dailyMilkTarget', this.dailyMilkTarget);
+            await db.setMetadata('dailySolidTarget', this.dailySolidTarget);
+            await db.setMetadata('defaultSolidInterval', this.defaultSolidInterval);
+            await db.setMetadata('dailyWaterTarget', this.dailyWaterTarget);
             await db.setMetadata('birthDate', this.birthDate);
             await db.setMetadata('notificationsEnabled', this.notificationsEnabled);
             await db.setMetadata('complementaryCatalog', this.complementaryCatalog);
@@ -3299,6 +3604,9 @@ class FeedingTracker {
         localStorage.setItem('darkMode', JSON.stringify(this.darkMode));
         localStorage.setItem('defaultInterval', this.defaultInterval.toString());
         localStorage.setItem('dailyMilkTarget', this.dailyMilkTarget.toString());
+        localStorage.setItem('dailySolidTarget', this.dailySolidTarget.toString());
+        localStorage.setItem('defaultSolidInterval', this.defaultSolidInterval.toString());
+        localStorage.setItem('dailyWaterTarget', this.dailyWaterTarget.toString());
         if (this.birthDate) localStorage.setItem('birthDate', this.birthDate);
         localStorage.setItem('notificationsEnabled', JSON.stringify(this.notificationsEnabled));
         localStorage.setItem('complementaryCatalog', JSON.stringify(this.complementaryCatalog));
@@ -3414,6 +3722,27 @@ class FeedingTracker {
                 this.dailyMilkTarget = dailyMilkTarget;
                 const targetInput = document.getElementById('daily-milk-target');
                 if (targetInput) targetInput.value = this.dailyMilkTarget;
+            }
+
+            const dailySolidTarget = await db.getMetadata('dailySolidTarget');
+            if (dailySolidTarget) {
+                this.dailySolidTarget = dailySolidTarget;
+                const solidTargetInput = document.getElementById('daily-solid-target');
+                if (solidTargetInput) solidTargetInput.value = this.dailySolidTarget;
+            }
+
+            const defaultSolidInterval = await db.getMetadata('defaultSolidInterval');
+            if (defaultSolidInterval) {
+                this.defaultSolidInterval = defaultSolidInterval;
+                const solidIntervalInput = document.getElementById('next-solid-interval');
+                if (solidIntervalInput) solidIntervalInput.value = this.defaultSolidInterval;
+            }
+
+            const dailyWaterTarget = await db.getMetadata('dailyWaterTarget');
+            if (dailyWaterTarget) {
+                this.dailyWaterTarget = dailyWaterTarget;
+                const waterTargetInput = document.getElementById('daily-water-target');
+                if (waterTargetInput) waterTargetInput.value = this.dailyWaterTarget;
             }
 
             const birthDate = await db.getMetadata('birthDate');
@@ -3713,12 +4042,20 @@ class FeedingTracker {
         }
         if (settings.defaultInterval) this.defaultInterval = settings.defaultInterval;
         if (settings.dailyMilkTarget) this.dailyMilkTarget = settings.dailyMilkTarget;
+        if (settings.dailySolidTarget) this.dailySolidTarget = settings.dailySolidTarget;
+        if (settings.defaultSolidInterval) this.defaultSolidInterval = settings.defaultSolidInterval;
+        if (settings.dailyWaterTarget) this.dailyWaterTarget = settings.dailyWaterTarget;
         if (settings.birthDate) {
             this.birthDate = settings.birthDate;
             this.updateAgeDisplay();
         }
         if (settings.notificationsEnabled !== undefined) {
             this.notificationsEnabled = settings.notificationsEnabled;
+        }
+        if (Array.isArray(settings.complementaryCatalog) && settings.complementaryCatalog.length > 0) {
+            this.complementaryCatalog = settings.complementaryCatalog;
+            this.renderComplementaryCatalog();
+            this.populateComplementaryFoodSelect();
         }
     }
 
@@ -3728,8 +4065,12 @@ class FeedingTracker {
             darkMode: this.darkMode,
             defaultInterval: this.defaultInterval,
             dailyMilkTarget: this.dailyMilkTarget,
+            dailySolidTarget: this.dailySolidTarget,
+            defaultSolidInterval: this.defaultSolidInterval,
+            dailyWaterTarget: this.dailyWaterTarget,
             birthDate: this.birthDate,
-            notificationsEnabled: this.notificationsEnabled
+            notificationsEnabled: this.notificationsEnabled,
+            complementaryCatalog: this.complementaryCatalog
         };
     }
 
@@ -3935,6 +4276,27 @@ class FeedingTracker {
         await this.refreshAllViews();
     }
 
+    async syncImportedDataToRemote() {
+        if (!this.syncReady || !this.currentProfileId) return;
+        this.setSyncStatus('syncing');
+        try {
+            await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
+                feedings: this.feedings,
+                diapers: this.diapers,
+                measurements: this.measurements,
+                medicines: this.medicines,
+                temperatures: this.temperatures,
+                appointments: this.appointments,
+                journal: this.journalEntries
+            });
+            await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
+            this.setSyncStatus('ok');
+        } catch (e) {
+            console.error('Auto-sync after import error:', e);
+            this.setSyncStatus('error');
+        }
+    }
+
     async forcePushToRemote() {
         if (!this.syncReady || !this.currentProfileId) return;
         if (!confirm('¿Sobrescribir datos remotos con los datos locales?')) return;
@@ -4107,6 +4469,27 @@ class FeedingTracker {
             this.dailyMilkTarget = parseInt(dailyMilkTargetData);
             const targetInput = document.getElementById('daily-milk-target');
             if (targetInput) targetInput.value = this.dailyMilkTarget;
+        }
+
+        const dailySolidTargetData = localStorage.getItem('dailySolidTarget');
+        if (dailySolidTargetData) {
+            this.dailySolidTarget = parseInt(dailySolidTargetData);
+            const solidTargetInput = document.getElementById('daily-solid-target');
+            if (solidTargetInput) solidTargetInput.value = this.dailySolidTarget;
+        }
+
+        const defaultSolidIntervalData = localStorage.getItem('defaultSolidInterval');
+        if (defaultSolidIntervalData) {
+            this.defaultSolidInterval = parseFloat(defaultSolidIntervalData);
+            const solidIntervalInput = document.getElementById('next-solid-interval');
+            if (solidIntervalInput) solidIntervalInput.value = this.defaultSolidInterval;
+        }
+
+        const dailyWaterTargetData = localStorage.getItem('dailyWaterTarget');
+        if (dailyWaterTargetData) {
+            this.dailyWaterTarget = parseInt(dailyWaterTargetData);
+            const waterTargetInput = document.getElementById('daily-water-target');
+            if (waterTargetInput) waterTargetInput.value = this.dailyWaterTarget;
         }
 
         const birthDateData = localStorage.getItem('birthDate');
