@@ -491,12 +491,14 @@
                         <div class="setting-actions">
                             <span class="setting-description" style="margin: 0;">Perfil: <strong id="sync-profile-id">—</strong></span>
                         </div>
-                        <div class="setting-actions" style="margin-top: 8px;">
+                        <div class="setting-actions" style="margin-top: 8px; flex-wrap: wrap; gap: 8px;">
                             <button id="share-profile-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.openShareModal()">🔗 Compartir Perfil</button>
-                            <button id="force-push-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.forcePushToRemote()">🔄 Forzar Sync</button>
+                            <button id="manual-merge-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.manualMergeData()" title="Unir datos locales y remotos sin perder nada">🔀 Fusionar Datos</button>
+                            <button id="force-push-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.forcePushToRemote()" title="Sobrescribir la nube con tus datos locales">⬆️ Sobrescribir Nube</button>
+                            <button id="force-pull-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.forcePullFromRemote()" title="Descargar datos de la nube reemplazando lo local">⬇️ Usar Datos Nube</button>
                             <button id="disconnect-sync" class="btn btn-danger">Desconectar</button>
                         </div>
-                        <p class="setting-description">Sincronización activa. Comparte tu perfil para sincronizar con otros dispositivos.</p>
+                        <p class="setting-description">Sincronización activa. Puedes fusionar datos, o forzar sobrescritura en la nube o en tu dispositivo.</p>
                     </div>
                 </div>
 

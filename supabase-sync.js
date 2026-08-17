@@ -351,30 +351,48 @@ async function pullData(profileId) {
         totalCount: 0
     };
     
-    const { data, error } = await client
-        .from('bft_records')
-        .select('*')
-        .eq('profile_id', profileId)
-        .order('record_time', { ascending: false });
-        
-    if (error) throw error;
-    if (!data) return result;
-    
-    for (const row of data) {
-        const local = mapDbToLocal(row);
-        if (!local) continue;
-        
-        let type = row.record_type;
-        // fallback mapping for arrays
-        if (type === 'feeding') result.feedings.push(local);
-        else if (type === 'diaper') result.diapers.push(local);
-        else if (type === 'measurement') result.measurements.push(local);
-        else if (type === 'medicine') result.medicines.push(local);
-        else if (type === 'temperature') result.temperatures.push(local);
-        else if (type === 'appointment') result.appointments.push(local);
-        else if (type === 'journal') result.journal.push(local);
-        
-        result.totalCount++;
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+
+        const { data, error } = await client
+            .from('bft_records')
+            .select('*')
+            .eq('profile_id', profileId)
+            .order('record_time', { ascending: false })
+            .range(from, to);
+
+        if (error) throw error;
+        if (!data || data.length === 0) {
+            hasMore = false;
+            break;
+        }
+
+        for (const row of data) {
+            const local = mapDbToLocal(row);
+            if (!local) continue;
+            
+            let type = row.record_type;
+            if (type === 'feeding') result.feedings.push(local);
+            else if (type === 'diaper') result.diapers.push(local);
+            else if (type === 'measurement') result.measurements.push(local);
+            else if (type === 'medicine') result.medicines.push(local);
+            else if (type === 'temperature') result.temperatures.push(local);
+            else if (type === 'appointment') result.appointments.push(local);
+            else if (type === 'journal') result.journal.push(local);
+            
+            result.totalCount++;
+        }
+
+        if (data.length < pageSize) {
+            hasMore = false;
+        } else {
+            page++;
+        }
     }
     
     return result;

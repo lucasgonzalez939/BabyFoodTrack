@@ -3892,29 +3892,30 @@ class FeedingTracker {
                 this.temperatures.length > 0 || this.appointments.length > 0 ||
                 this.journalEntries.length > 0;
 
-            // ── Step 2: Four explicit scenarios ──────────────────────────────────
-            if (!remoteIsEmpty) {
-                // [A] Remote has data → remote wins, replace local.
-                //     (Typical for joining a shared profile or re-installing the app.)
-                console.log(`initSync [A]: remote has ${initialRemote.totalCount} records — replacing local`);
+            // ── Step 2: Smart Sync Scenarios ──────────────────────────────────
+            if (!remoteIsEmpty && hasLocal) {
+                // Both remote and local have records -> Smart Union Merge (never drop local records)
+                console.log(`initSync [A]: remote has ${initialRemote.totalCount} records, local has records — performing union merge`);
+                await this.mergeLocalAndRemoteData(initialRemote);
+                const remoteSettings = await BftSync.pullSettings(profileId, babyId);
+                if (remoteSettings) this.applyRemoteSettings(remoteSettings);
+
+            } else if (!remoteIsEmpty && !hasLocal) {
+                // Remote has records, local is empty -> pull remote into local
+                console.log(`initSync [B]: remote has ${initialRemote.totalCount} records, local empty — replacing local`);
                 await this.replaceLocalWithRemote(initialRemote);
                 const remoteSettings = await BftSync.pullSettings(profileId, babyId);
                 if (remoteSettings) this.applyRemoteSettings(remoteSettings);
 
             } else if (hasLocal) {
-                // [B] Remote is empty, local has data → push local up (first-time seed).
-                //     NEVER call replaceLocalWithRemote here; local is the source of truth.
-                console.log(`initSync [B]: remote empty, local has data — seeding remote`);
+                // Remote is empty, local has data -> seed remote with local data
+                console.log(`initSync [C]: remote empty, local has data — seeding remote`);
 
-                // Check for legacy snapshot in remote (old bft_latest_state table).
-                // If found, it means this profileId was used before — we ignore it and
-                // let local win (local is more up-to-date than a stale snapshot).
                 const legacy = await BftSync.migrateFromLegacySnapshot(profileId, babyId);
                 if (legacy.migrated) {
-                    console.log(`initSync [B]: legacy snapshot found (${legacy.count} records) — overwriting with current local data`);
+                    console.log(`initSync [C]: legacy snapshot found (${legacy.count} records) — overwriting with current local data`);
                 }
 
-                // Push current local data (overrides any stale legacy records just uploaded)
                 await BftSync.pushAllData(profileId, babyId, {
                     feedings: this.feedings,
                     diapers: this.diapers,
@@ -3927,22 +3928,18 @@ class FeedingTracker {
                 await BftSync.pushSettings(profileId, babyId, this.buildSettingsSnapshot());
 
             } else {
-                // [C] Both empty → try legacy migration as the seed source.
-                console.log('initSync [C]: both remote and local empty — attempting legacy migration');
+                // Both empty -> check for legacy migration
+                console.log('initSync [D]: both remote and local empty — attempting legacy migration');
                 const legacy = await BftSync.migrateFromLegacySnapshot(profileId, babyId);
 
                 if (legacy.migrated && legacy.count > 0) {
-                    // Legacy records are now in remote; pull them into local.
-                    console.log(`initSync [C]: legacy migrated ${legacy.count} records — pulling into local`);
+                    console.log(`initSync [D]: legacy migrated ${legacy.count} records — pulling into local`);
                     const afterLegacy = await BftSync.pullData(profileId);
                     if (afterLegacy && afterLegacy.totalCount > 0) {
                         await this.replaceLocalWithRemote(afterLegacy);
                         const legacySettings = await BftSync.pullSettings(profileId, babyId);
                         if (legacySettings) this.applyRemoteSettings(legacySettings);
                     }
-                } else {
-                    // [D] Truly empty on both sides — nothing to do.
-                    console.log('initSync [D]: fresh install, no data anywhere');
                 }
             }
 
@@ -3960,6 +3957,63 @@ class FeedingTracker {
             console.error('initSync error:', e);
             this.setSyncStatus('error');
         }
+    }
+
+    async mergeLocalAndRemoteData(remote) {
+        const mergeList = (localArr, remoteArr) => {
+            const map = new Map();
+            (localArr || []).forEach(r => {
+                if (r && r.id) map.set(r.id.toString(), r);
+            });
+            (remoteArr || []).forEach(r => {
+                if (r && r.id) map.set(r.id.toString(), r);
+            });
+            return Array.from(map.values());
+        };
+
+        const mergedFeedings = mergeList(this.feedings, remote.feedings).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const mergedDiapers = mergeList(this.diapers, remote.diapers).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const mergedMeasurements = mergeList(this.measurements, remote.measurements).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const mergedMedicines = mergeList(this.medicines, remote.medicines).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const mergedTemperatures = mergeList(this.temperatures, remote.temperatures).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const mergedAppointments = mergeList(this.appointments, remote.appointments).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const mergedJournal = mergeList(this.journalEntries, remote.journal).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        if (this.useIndexedDB) {
+            await db.clearAllData();
+            for (const f of mergedFeedings) await db.addFeeding(f);
+            for (const d of mergedDiapers) await db.addDiaper(d);
+            for (const m of mergedMeasurements) await db.addMeasurement(m);
+            for (const m of mergedMedicines) await db.addMedicine(m);
+            for (const t of mergedTemperatures) await db.addTemperature(t);
+            for (const a of mergedAppointments) await db.addAppointment(a);
+            for (const j of mergedJournal) await db.addJournalEntry(j);
+        }
+
+        this.feedings = mergedFeedings;
+        this.diapers = mergedDiapers;
+        this.measurements = mergedMeasurements;
+        this.medicines = mergedMedicines;
+        this.temperatures = mergedTemperatures;
+        this.appointments = mergedAppointments;
+        this.journalEntries = mergedJournal;
+
+        if (!this.useIndexedDB) {
+            this.saveToLocalStorage();
+        }
+
+        // Push merged dataset back up so remote also has full dataset
+        await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
+            feedings: this.feedings,
+            diapers: this.diapers,
+            measurements: this.measurements,
+            medicines: this.medicines,
+            temperatures: this.temperatures,
+            appointments: this.appointments,
+            journal: this.journalEntries
+        });
+
+        await this.refreshAllViews();
     }
 
     async replaceLocalWithRemote(remote) {
@@ -4299,7 +4353,7 @@ class FeedingTracker {
 
     async forcePushToRemote() {
         if (!this.syncReady || !this.currentProfileId) return;
-        if (!confirm('¿Sobrescribir datos remotos con los datos locales?')) return;
+        if (!confirm('¿Sobrescribir datos remotos en la nube con los datos locales de este dispositivo? Esta acción borrará los registros antiguos de la nube.')) return;
         
         this.setSyncStatus('syncing');
         try {
@@ -4315,11 +4369,49 @@ class FeedingTracker {
             });
             await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
             this.setSyncStatus('ok');
-            alert('✅ Datos sincronizados correctamente.');
+            alert('✅ Nube sobrescrita con los datos locales correctamente.');
         } catch (e) {
             console.error('Force push error:', e);
             this.setSyncStatus('error');
-            alert('❌ Error al sincronizar.');
+            alert('❌ Error al sobrescribir la nube.');
+        }
+    }
+
+    async forcePullFromRemote() {
+        if (!this.syncReady || !this.currentProfileId) return;
+        if (!confirm('¿Descartar datos locales y descargar únicamente los datos de la nube?')) return;
+        
+        this.setSyncStatus('syncing');
+        try {
+            const remoteData = await BftSync.pullData(this.currentProfileId);
+            if (remoteData) {
+                await this.replaceLocalWithRemote(remoteData);
+                const remoteSettings = await BftSync.pullSettings(this.currentProfileId, this.currentBabyId);
+                if (remoteSettings) this.applyRemoteSettings(remoteSettings);
+            }
+            this.setSyncStatus('ok');
+            alert('✅ Datos de la nube descargados correctamente.');
+        } catch (e) {
+            console.error('Force pull error:', e);
+            this.setSyncStatus('error');
+            alert('❌ Error al descargar de la nube.');
+        }
+    }
+
+    async manualMergeData() {
+        if (!this.syncReady || !this.currentProfileId) return;
+        this.setSyncStatus('syncing');
+        try {
+            const remoteData = await BftSync.pullData(this.currentProfileId);
+            if (remoteData) {
+                await this.mergeLocalAndRemoteData(remoteData);
+            }
+            this.setSyncStatus('ok');
+            alert('✅ Datos locales y remotos fusionados correctamente sin pérdidas.');
+        } catch (e) {
+            console.error('Manual merge error:', e);
+            this.setSyncStatus('error');
+            alert('❌ Error al fusionar datos.');
         }
     }
 
