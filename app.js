@@ -3254,66 +3254,28 @@ class FeedingTracker {
 
                 const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length + importedMedicines.length + importedTemperatures.length + importedAppointments.length + importedJournalEntries.length;
                 if (totalImported === 0) {
-                    alert('No se encontraron datos válidos en el archivo');
+                    alert('No se encontraron datos válidos en el archivo CSV');
                     return;
                 }
 
-                if (confirm(`¿Importar ${importedFeedings.length} alimentaciones, ${importedDiapers.length} pañales, ${importedMeasurements.length} mediciones, ${importedMedicines.length} medicamentos, ${importedTemperatures.length} temperaturas, ${importedAppointments.length} citas y ${importedJournalEntries.length} eventos? Esto se agregará a los datos existentes.`)) {
-                    
-                    if (this.useIndexedDB) {
-                        // Save to IndexedDB
-                        for (const f of importedFeedings) await db.addFeeding(f);
-                        for (const d of importedDiapers) await db.addDiaper(d);
-                        for (const m of importedMeasurements) await db.addMeasurement(m);
-                        for (const m of importedMedicines) await db.addMedicine(m);
-                        for (const t of importedTemperatures) await db.addTemperature(t);
-                        for (const a of importedAppointments) await db.addAppointment(a);
-                        for (const j of importedJournalEntries) await db.addJournalEntry(j);
-                        
-                        // Reload data
-                        await this.loadFromStorage();
-                    } else {
-                        // Save to LocalStorage
-                        // Assign IDs for local storage
-                        importedFeedings.forEach((f, idx) => f.id = Date.now() + idx);
-                        importedDiapers.forEach((d, idx) => d.id = Date.now() + idx + 10000);
-                        importedMeasurements.forEach((m, idx) => m.id = Date.now() + idx + 20000);
-                        importedMedicines.forEach((m, idx) => m.id = Date.now() + idx + 30000);
-                        importedTemperatures.forEach((t, idx) => t.id = Date.now() + idx + 40000);
-                        importedAppointments.forEach((a, idx) => a.id = Date.now() + idx + 50000);
-                        importedJournalEntries.forEach((j, idx) => j.id = Date.now() + idx + 60000);
+                const csvPayload = {
+                    feedings: importedFeedings,
+                    diapers: importedDiapers,
+                    measurements: importedMeasurements,
+                    medicines: importedMedicines,
+                    temperatures: importedTemperatures,
+                    appointments: importedAppointments,
+                    journalEntries: importedJournalEntries,
+                    ...importedConfig
+                };
 
-                        this.feedings = [...importedFeedings, ...this.feedings];
-                        this.feedings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                        
-                        this.diapers = [...importedDiapers, ...this.diapers];
-                        this.diapers.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-                        this.measurements = [...importedMeasurements, ...this.measurements];
-                        this.measurements.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-                        this.medicines = [...importedMedicines, ...this.medicines];
-                        this.medicines.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-                        this.temperatures = [...importedTemperatures, ...this.temperatures];
-                        this.temperatures.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-                        this.appointments = [...importedAppointments, ...this.appointments];
-                        this.appointments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-                        this.journalEntries = [...importedJournalEntries, ...this.journalEntries];
-                        this.journalEntries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                        
-                        this.saveToLocalStorage();
+                this.openImportStrategyModal(
+                    `📄 Archivo CSV detectado con ${totalImported} registros.`,
+                    async (localStrategy, cloudStrategy) => {
+                        await this.processImportPayload(csvPayload, localStrategy, cloudStrategy);
                     }
+                );
 
-                    await this.applyAndSaveImportedSettings(importedConfig);
-                    await this.refreshAllViewsAfterImport();
-                    if (this.syncReady) {
-                        await this.syncImportedDataToRemote();
-                    }
-                    alert('¡Importación exitosa!');
-                }
             } catch (error) {
                 console.error(error);
                 alert('Error al importar CSV: ' + error.message);
@@ -3325,72 +3287,168 @@ class FeedingTracker {
         event.target.value = '';
     }
 
-    async refreshAllViewsAfterImport() {
-        await this.renderFeedingList();
-        await this.renderDiaperList();
-        await this.renderMeasurementList();
-        await this.renderMedicineList();
-        await this.renderTemperatureList();
-        await this.renderAppointmentList();
-        await this.renderJournalList();
-        this.renderTemperatureChart();
-        await this.updateDiaperTodaySummary();
-        await this.updateStats('today');
-        await this.updateGraphs('today');
+    // ============= IMPORT CONCILIATION & STRATEGY MODAL =============
+
+    openImportStrategyModal(summaryText, onConfirmCallback) {
+        const modal = document.getElementById('import-strategy-modal');
+        const summaryEl = document.getElementById('import-summary-text');
+        const cloudGroup = document.getElementById('import-cloud-group');
+        const confirmBtn = document.getElementById('confirm-import-strategy-btn');
+
+        if (!modal) return;
+
+        if (summaryEl) summaryEl.textContent = summaryText;
+
+        if (cloudGroup) {
+            if (this.syncReady && this.currentProfileId) {
+                cloudGroup.style.display = 'block';
+            } else {
+                cloudGroup.style.display = 'none';
+            }
+        }
+
+        const newConfirmBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+        newConfirmBtn.addEventListener('click', () => {
+            const localStrategy = document.getElementById('import-local-strategy').value;
+            const cloudStrategy = document.getElementById('import-cloud-strategy').value;
+            this.closeImportStrategyModal();
+            onConfirmCallback(localStrategy, cloudStrategy);
+        });
+
+        modal.classList.add('active');
     }
 
-    async applyAndSaveImportedSettings(payload) {
-        if (payload.timezone) this.timezone = payload.timezone;
-        if (typeof payload.darkMode === 'boolean') this.darkMode = payload.darkMode;
-        if (typeof payload.defaultInterval === 'number') this.defaultInterval = payload.defaultInterval;
-        if (typeof payload.dailyMilkTarget === 'number') this.dailyMilkTarget = payload.dailyMilkTarget;
-        if (typeof payload.dailySolidTarget === 'number') this.dailySolidTarget = payload.dailySolidTarget;
-        if (typeof payload.defaultSolidInterval === 'number') this.defaultSolidInterval = payload.defaultSolidInterval;
-        if (typeof payload.dailyWaterTarget === 'number') this.dailyWaterTarget = payload.dailyWaterTarget;
-        if (payload.birthDate) this.birthDate = payload.birthDate;
-        if (typeof payload.notificationsEnabled === 'boolean') this.notificationsEnabled = payload.notificationsEnabled;
+    closeImportStrategyModal() {
+        const modal = document.getElementById('import-strategy-modal');
+        if (modal) modal.classList.remove('active');
+    }
 
-        if (Array.isArray(payload.complementaryCatalog) && payload.complementaryCatalog.length > 0) {
-            const mergedCatalog = [...new Set([...this.complementaryCatalog, ...payload.complementaryCatalog.map(i => this.normalizeCatalogFoodName(i)).filter(Boolean)])];
-            this.complementaryCatalog = mergedCatalog.sort((a, b) => a.localeCompare(b, 'es'));
+    deduplicateRecordList(existingList, importedList, type) {
+        const map = new Map();
+
+        (existingList || []).forEach(item => {
+            if (!item) return;
+            const ts = item.timestamp || item.time;
+            const timeKey = ts ? new Date(ts).toISOString() : `id:${item.id}`;
+            const key = `${type}:${timeKey}`;
+            map.set(key, item);
+        });
+
+        (importedList || []).forEach(item => {
+            if (!item) return;
+            const ts = item.timestamp || item.time;
+            const timeKey = ts ? new Date(ts).toISOString() : `id:${item.id}`;
+            const key = `${type}:${timeKey}`;
+            if (map.has(key)) {
+                const existing = map.get(key);
+                map.set(key, { ...existing, ...item, id: existing.id, timestamp: timeKey, time: timeKey });
+            } else {
+                map.set(key, { ...item, timestamp: timeKey, time: timeKey });
+            }
+        });
+
+        return Array.from(map.values());
+    }
+
+    async processImportPayload(payload, localStrategy, cloudStrategy) {
+        try {
+            if (this.useIndexedDB) await db.snapshotAllData();
+        } catch (e) {
+            console.warn('Pre-import snapshot warning:', e);
+        }
+
+        const rawFeedings = Array.isArray(payload.feedings) ? payload.feedings : [];
+        const rawDiapers = Array.isArray(payload.diapers) ? payload.diapers : [];
+        const rawMeasurements = Array.isArray(payload.measurements) ? payload.measurements : [];
+        const rawMedicines = Array.isArray(payload.medicines) ? payload.medicines : [];
+        const rawTemperatures = Array.isArray(payload.temperatures) ? payload.temperatures : [];
+        const rawAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
+        const rawJournal = Array.isArray(payload.journalEntries) || Array.isArray(payload.journal) ? (payload.journalEntries || payload.journal) : [];
+
+        let finalFeedings, finalDiapers, finalMeasurements, finalMedicines, finalTemperatures, finalAppointments, finalJournal;
+
+        if (localStrategy === 'replace') {
+            finalFeedings = rawFeedings;
+            finalDiapers = rawDiapers;
+            finalMeasurements = rawMeasurements;
+            finalMedicines = rawMedicines;
+            finalTemperatures = rawTemperatures;
+            finalAppointments = rawAppointments;
+            finalJournal = rawJournal;
+        } else {
+            // 'merge' — deduplicate by timestamp signature to prevent duplicate records
+            finalFeedings = this.deduplicateRecordList(this.feedings, rawFeedings, 'feeding').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            finalDiapers = this.deduplicateRecordList(this.diapers, rawDiapers, 'diaper').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            finalMeasurements = this.deduplicateRecordList(this.measurements, rawMeasurements, 'measurement').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            finalMedicines = this.deduplicateRecordList(this.medicines, rawMedicines, 'medicine').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            finalTemperatures = this.deduplicateRecordList(this.temperatures, rawTemperatures, 'temperature').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            finalAppointments = this.deduplicateRecordList(this.appointments, rawAppointments, 'appointment').sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            finalJournal = this.deduplicateRecordList(this.journalEntries, rawJournal, 'journal').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         }
 
         if (this.useIndexedDB) {
-            if (this.timezone) await db.setMetadata('timezone', this.timezone);
-            if (typeof this.darkMode === 'boolean') await db.setMetadata('darkMode', this.darkMode);
-            if (this.defaultInterval) await db.setMetadata('defaultInterval', this.defaultInterval);
-            if (this.dailyMilkTarget) await db.setMetadata('dailyMilkTarget', this.dailyMilkTarget);
-            if (this.dailySolidTarget) await db.setMetadata('dailySolidTarget', this.dailySolidTarget);
-            if (this.defaultSolidInterval) await db.setMetadata('defaultSolidInterval', this.defaultSolidInterval);
-            if (this.dailyWaterTarget) await db.setMetadata('dailyWaterTarget', this.dailyWaterTarget);
-            if (this.birthDate) await db.setMetadata('birthDate', this.birthDate);
-            if (typeof this.notificationsEnabled === 'boolean') await db.setMetadata('notificationsEnabled', this.notificationsEnabled);
-            await db.setMetadata('complementaryCatalog', this.complementaryCatalog);
-        } else {
+            await db.clearAllData();
+            for (const f of finalFeedings) await db.addFeeding(f);
+            for (const d of finalDiapers) await db.addDiaper(d);
+            for (const m of finalMeasurements) await db.addMeasurement(m);
+            for (const m of finalMedicines) await db.addMedicine(m);
+            for (const t of finalTemperatures) await db.addTemperature(t);
+            for (const a of finalAppointments) await db.addAppointment(a);
+            for (const j of finalJournal) await db.addJournalEntry(j);
+        }
+
+        this.feedings = finalFeedings;
+        this.diapers = finalDiapers;
+        this.measurements = finalMeasurements;
+        this.medicines = finalMedicines;
+        this.temperatures = finalTemperatures;
+        this.appointments = finalAppointments;
+        this.journalEntries = finalJournal;
+
+        if (!this.useIndexedDB) {
             this.saveToLocalStorage();
         }
 
-        // Update form input elements in Settings UI
-        const birthInput = document.getElementById('birth-date');
-        if (birthInput && this.birthDate) birthInput.value = this.birthDate;
+        await this.applyAndSaveImportedSettings(payload);
+        await this.refreshAllViewsAfterImport();
+        this.renderComplementaryCatalog();
+        this.populateComplementaryFoodSelect();
+        this.applyDarkMode();
 
-        const intervalInput = document.getElementById('next-feeding-interval');
-        if (intervalInput && this.defaultInterval) intervalInput.value = this.defaultInterval;
+        if (this.syncReady && this.currentProfileId) {
+            if (cloudStrategy === 'overwrite_cloud') {
+                this.setSyncStatus('syncing');
+                await BftSync.deleteAllRecords(this.currentProfileId);
+                await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
+                    feedings: this.feedings,
+                    diapers: this.diapers,
+                    measurements: this.measurements,
+                    medicines: this.medicines,
+                    temperatures: this.temperatures,
+                    appointments: this.appointments,
+                    journal: this.journalEntries
+                });
+                await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
+                this.setSyncStatus('ok');
+            } else if (cloudStrategy === 'merge_cloud') {
+                this.setSyncStatus('syncing');
+                await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
+                    feedings: this.feedings,
+                    diapers: this.diapers,
+                    measurements: this.measurements,
+                    medicines: this.medicines,
+                    temperatures: this.temperatures,
+                    appointments: this.appointments,
+                    journal: this.journalEntries
+                });
+                await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
+                this.setSyncStatus('ok');
+            }
+        }
 
-        const solidIntervalInput = document.getElementById('next-solid-interval');
-        if (solidIntervalInput && this.defaultSolidInterval) solidIntervalInput.value = this.defaultSolidInterval;
-
-        const targetInput = document.getElementById('daily-milk-target');
-        if (targetInput && this.dailyMilkTarget) targetInput.value = this.dailyMilkTarget;
-
-        const solidTargetInput = document.getElementById('daily-solid-target');
-        if (solidTargetInput && this.dailySolidTarget) solidTargetInput.value = this.dailySolidTarget;
-
-        const waterTargetInput = document.getElementById('daily-water-target');
-        if (waterTargetInput && this.dailyWaterTarget) waterTargetInput.value = this.dailyWaterTarget;
-
-        const notifToggle = document.getElementById('notifications-toggle');
-        if (notifToggle && typeof this.notificationsEnabled === 'boolean') notifToggle.checked = this.notificationsEnabled;
+        alert('✅ Importación completada con éxito.');
     }
 
     importJSON(event) {
@@ -3408,159 +3466,20 @@ class FeedingTracker {
                 const importedMedicines = Array.isArray(payload.medicines) ? payload.medicines : [];
                 const importedTemperatures = Array.isArray(payload.temperatures) ? payload.temperatures : [];
                 const importedAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
-                const importedJournalEntries = Array.isArray(payload.journalEntries) ? payload.journalEntries : [];
-                const importedCatalog = Array.isArray(payload.complementaryCatalog) ? payload.complementaryCatalog : [];
+                const importedJournalEntries = Array.isArray(payload.journalEntries) || Array.isArray(payload.journal) ? (payload.journalEntries || payload.journal) : [];
 
                 const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length + importedMedicines.length + importedTemperatures.length + importedAppointments.length + importedJournalEntries.length;
                 if (totalImported === 0) {
-                    alert('No se encontraron datos validos en el archivo JSON');
+                    alert('No se encontraron datos válidos en el archivo JSON');
                     return;
                 }
 
-                if (!confirm(`¿Importar respaldo JSON con ${totalImported} registros? Se agregara a los datos existentes.`)) {
-                    return;
-                }
-
-                if (this.useIndexedDB) {
-                    for (const f of importedFeedings) {
-                        await db.addFeeding({
-                            time: f.time || f.timestamp,
-                            type: f.type,
-                            amount: f.amount,
-                            duration: f.duration,
-                            food: f.food,
-                            grams: f.grams,
-                            reaction: f.reaction,
-                            allergens: f.allergens,
-                            notes: f.notes,
-                            nextFeedingInterval: f.nextFeedingInterval || this.defaultInterval,
-                            timezone: f.timezone || this.timezone
-                        });
+                this.openImportStrategyModal(
+                    `📦 Archivo JSON detectado con ${totalImported} registros.`,
+                    async (localStrategy, cloudStrategy) => {
+                        await this.processImportPayload(payload, localStrategy, cloudStrategy);
                     }
-
-                    for (const d of importedDiapers) {
-                        await db.addDiaper({
-                            time: d.time || d.timestamp,
-                            hasPee: Boolean(d.hasPee),
-                            hasPoop: Boolean(d.hasPoop),
-                            level: d.level || 2,
-                            notes: d.notes || '',
-                            timezone: d.timezone || this.timezone
-                        });
-                    }
-
-                    for (const m of importedMeasurements) {
-                        await db.addMeasurement({
-                            time: m.time || m.timestamp,
-                            weight: m.weight || null,
-                            height: m.height || null,
-                            timezone: m.timezone || this.timezone
-                        });
-                    }
-
-                    for (const m of importedMedicines) {
-                        await db.addMedicine({
-                            time: m.time || m.timestamp,
-                            name: m.name || 'Medicamento',
-                            dose: m.dose || '',
-                            interval: m.interval || 0,
-                            notes: m.notes || '',
-                            active: m.active !== false,
-                            nextDose: m.nextDose || null,
-                            timezone: m.timezone || this.timezone
-                        });
-                    }
-
-                    for (const t of importedTemperatures) {
-                        if (!t.value) continue;
-                        await db.addTemperature({
-                            time: t.time || t.timestamp,
-                            value: t.value,
-                            notes: t.notes || '',
-                            timezone: t.timezone || this.timezone
-                        });
-                    }
-
-                    for (const a of importedAppointments) {
-                        await db.addAppointment({
-                            time: a.time || a.timestamp,
-                            type: a.type || 'other',
-                            title: a.title || 'Cita médica',
-                            location: a.location || '',
-                            notes: a.notes || '',
-                            completed: Boolean(a.completed),
-                            timezone: a.timezone || this.timezone
-                        });
-                    }
-
-                    for (const j of importedJournalEntries) {
-                        await db.addJournalEntry({
-                            time: j.time || j.timestamp,
-                            category: j.category || 'other',
-                            title: j.title || 'Evento',
-                            description: j.description || '',
-                            tags: Array.isArray(j.tags) ? j.tags : [],
-                            timezone: j.timezone || this.timezone
-                        });
-                    }
-
-                    if (importedCatalog.length > 0) {
-                        const mergedCatalog = [...new Set([...this.complementaryCatalog, ...importedCatalog.map(i => this.normalizeCatalogFoodName(i)).filter(Boolean)])];
-                        this.complementaryCatalog = mergedCatalog.sort((a, b) => a.localeCompare(b, 'es'));
-                        await db.setMetadata('complementaryCatalog', this.complementaryCatalog);
-                    }
-
-                    await this.loadFromStorage();
-                } else {
-                    importedFeedings.forEach((f, idx) => {
-                        f.id = Date.now() + idx;
-                        f.timestamp = f.timestamp || f.time;
-                    });
-                    importedDiapers.forEach((d, idx) => {
-                        d.id = Date.now() + idx + 10000;
-                        d.timestamp = d.timestamp || d.time;
-                    });
-                    importedMeasurements.forEach((m, idx) => {
-                        m.id = Date.now() + idx + 20000;
-                        m.timestamp = m.timestamp || m.time;
-                    });
-                    importedMedicines.forEach((m, idx) => {
-                        m.id = Date.now() + idx + 30000;
-                        m.timestamp = m.timestamp || m.time;
-                    });
-                    importedTemperatures.forEach((t, idx) => {
-                        t.id = Date.now() + idx + 40000;
-                        t.timestamp = t.timestamp || t.time;
-                    });
-                    importedAppointments.forEach((a, idx) => {
-                        a.id = Date.now() + idx + 50000;
-                        a.timestamp = a.timestamp || a.time;
-                    });
-                    importedJournalEntries.forEach((j, idx) => {
-                        j.id = Date.now() + idx + 60000;
-                        j.timestamp = j.timestamp || j.time;
-                    });
-
-                    this.feedings = [...importedFeedings, ...this.feedings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    this.diapers = [...importedDiapers, ...this.diapers].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    this.measurements = [...importedMeasurements, ...this.measurements].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    this.medicines = [...importedMedicines, ...this.medicines].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    this.temperatures = [...importedTemperatures, ...this.temperatures].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    this.appointments = [...importedAppointments, ...this.appointments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                    this.journalEntries = [...importedJournalEntries, ...this.journalEntries].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                }
-
-                // Always apply and persist settings from JSON payload
-                await this.applyAndSaveImportedSettings(payload);
-
-                await this.refreshAllViewsAfterImport();
-                this.renderComplementaryCatalog();
-                this.populateComplementaryFoodSelect();
-                this.applyDarkMode();
-                if (this.syncReady) {
-                    await this.syncImportedDataToRemote();
-                }
-                alert('¡Importación JSON exitosa!');
+                );
             } catch (error) {
                 console.error(error);
                 alert('Error al importar JSON: ' + error.message);
