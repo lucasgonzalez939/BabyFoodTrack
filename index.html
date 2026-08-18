@@ -475,6 +475,18 @@
                 <div class="setting-item">
                     <label>Sincronización en la Nube</label>
 
+                    <!-- Auto-Sync Toggle Switch -->
+                    <div style="margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="font-weight: 600; font-size: 0.85rem; display: block;">⚡ Sincronización Automática (Auto-Sync)</span>
+                            <span class="setting-description" style="margin: 0; font-size: 0.75rem;">Si se desactiva, los registros permanecen 100% locales hasta que decidas enviarlos.</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="auto-sync-toggle" checked onchange="window.tracker && window.tracker.toggleAutoSync(this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
                     <!-- Connect section (shown when not connected) -->
                     <div id="sync-connect-section">
                         <div class="setting-actions" style="flex-direction: column; gap: 8px;">
@@ -483,7 +495,7 @@
                             <input type="text" id="supabase-profile-input" class="setting-input" placeholder="ID de Perfil (opcional, o pegar enlace de invitación)" style="margin-bottom: 0;">
                             <button id="connect-sync" class="btn btn-primary">🔗 Conectar</button>
                         </div>
-                        <p class="setting-description">Ingresa las credenciales de tu proyecto Supabase para activar sincronización en tiempo real entre dispositivos.</p>
+                        <p class="setting-description">Ingresa las credenciales de tu proyecto Supabase para activar sincronización entre dispositivos.</p>
                     </div>
 
                     <!-- Connected section (shown when connected) -->
@@ -493,31 +505,30 @@
                         </div>
                         <div class="setting-actions" style="margin-top: 8px; flex-wrap: wrap; gap: 8px;">
                             <button id="share-profile-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.openShareModal()">🔗 Compartir Perfil</button>
-                            <button id="manual-merge-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.manualMergeData()" title="Unir datos locales y remotos sin perder nada">🔀 Fusionar Datos</button>
-                            <button id="force-push-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.forcePushToRemote()" title="Sobrescribir la nube con tus datos locales">⬆️ Sobrescribir Nube</button>
-                            <button id="force-pull-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.forcePullFromRemote()" title="Descargar datos de la nube reemplazando lo local">⬇️ Usar Datos Nube</button>
+                            <button id="git-fetch-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.gitFetch()" title="Consultar estado de la nube sin alterar datos locales (git fetch)">☁️ Consultar Nube (Fetch)</button>
+                            <button id="git-push-btn" class="btn btn-primary" onclick="window.tracker && window.tracker.gitPush()" title="Enviar cambios locales pendientes a la nube (git push)">⬆️ Subir Cambios (Push)</button>
+                            <button id="git-pull-btn" class="btn btn-secondary" onclick="window.tracker && window.tracker.gitPull()" title="Descargar e integrar datos de la nube (git pull)">⬇️ Bajar Cambios (Pull)</button>
                             <button id="disconnect-sync" class="btn btn-danger">Desconectar</button>
                         </div>
-                        <p class="setting-description">Sincronización activa. Puedes fusionar datos, o forzar sobrescritura en la nube o en tu dispositivo.</p>
                     </div>
 
-                    <!-- Live Sync Status & Counters Dashboard Card -->
+                    <!-- Live Sync Status & Git Versioning Dashboard Card -->
                     <div id="sync-telemetry-card" class="sync-telemetry-card" style="margin-top: 14px; padding: 14px; background: rgba(0, 0, 0, 0.03); border-radius: 12px; border: 1px solid rgba(0, 0, 0, 0.08);">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
                             <span style="font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
-                                📊 Estado e Historial de Sincronización
+                                📊 Estado Git & Control de Versiones
                             </span>
                             <span id="sync-live-badge" class="sync-badge" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: 600; background: rgba(0,0,0,0.06); color: var(--text-color);">⚪ Desconectado</span>
                         </div>
 
                         <div class="telemetry-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; text-align: center;">
                             <div style="background: var(--card-background, #fff); padding: 8px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);">
-                                <div style="font-size: 0.75rem; opacity: 0.75;">📱 Local</div>
+                                <div style="font-size: 0.75rem; opacity: 0.75;">📱 Local (Working Copy)</div>
                                 <div id="count-local-records" style="font-size: 1.25rem; font-weight: 700; color: var(--primary-color);">0</div>
                                 <div style="font-size: 0.65rem; opacity: 0.6;">Registros</div>
                             </div>
                             <div style="background: var(--card-background, #fff); padding: 8px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);">
-                                <div style="font-size: 0.75rem; opacity: 0.75;">☁️ Nube</div>
+                                <div style="font-size: 0.75rem; opacity: 0.75;">☁️ Remoto (Head)</div>
                                 <div id="count-remote-records" style="font-size: 1.25rem; font-weight: 700; color: #2563eb;">—</div>
                                 <div style="font-size: 0.65rem; opacity: 0.6;">Supabase</div>
                             </div>
@@ -534,9 +545,12 @@
                             <div>📸 <strong>Último respaldo local:</strong> <span id="ts-last-backup">—</span></div>
                         </div>
 
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="window.tracker && window.tracker.refreshSyncTelemetry()" style="margin-top: 10px; width: 100%; font-size: 0.8rem;">
-                            🔄 Actualizar Contadores
-                        </button>
+                        <!-- Admin Force Override Control -->
+                        <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(0,0,0,0.12);">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="window.tracker && window.tracker.gitAdminForcePush()" style="width: 100%; font-size: 0.78rem; background: rgba(225, 29, 72, 0.08); color: var(--danger-color); border: 1px solid rgba(225, 29, 72, 0.2);" title="Modo Administrador: Purga la nube y la reconstruye únicamente desde este dispositivo local">
+                                👑 Modo Admin: Reconstruir Nube desde Local (git push --force)
+                            </button>
+                        </div>
                     </div>
                 </div>
 

@@ -39,6 +39,9 @@ class FeedingTracker {
         this.pendingDeletes = [];
         this.syncTimeout = null;
         this.isSyncing = false;
+        this.autoSyncEnabled = localStorage.getItem('bft_auto_sync_enabled') !== 'false';
+        this.lastLocalChangeTimestamp = localStorage.getItem('bft_last_local_change') || null;
+        this.lastSyncTransactionTimestamp = localStorage.getItem('bft_last_sync_tx') || null;
         this.complementaryCatalog = [
             'Pure de zanahoria',
             'Pure de calabaza',
@@ -4297,41 +4300,121 @@ class FeedingTracker {
         }
     }
 
-    async forcePullFromRemote() {
-        if (!this.syncReady || !this.currentProfileId) return;
-        if (!confirm('¿Descartar datos locales y descargar únicamente los datos de la nube?')) return;
-        
-        this.setSyncStatus('syncing');
-        try {
-            const remoteData = await BftSync.pullData(this.currentProfileId);
-            if (remoteData) {
-                await this.replaceLocalWithRemote(remoteData);
-                const remoteSettings = await BftSync.pullSettings(this.currentProfileId, this.currentBabyId);
-                if (remoteSettings) this.applyRemoteSettings(remoteSettings);
+    toggleAutoSync(enabled) {
+        this.autoSyncEnabled = Boolean(enabled);
+        localStorage.setItem('bft_auto_sync_enabled', this.autoSyncEnabled ? 'true' : 'false');
+        if (this.useIndexedDB) {
+            db.setMetadata('autoSyncEnabled', this.autoSyncEnabled).catch(console.warn);
+        }
+        const toggleEl = document.getElementById('auto-sync-toggle');
+        if (toggleEl) toggleEl.checked = this.autoSyncEnabled;
+
+        if (this.autoSyncEnabled && this.syncReady) {
+            if (this.pendingSyncRecords.size > 0 || this.pendingDeletes.length > 0) {
+                this.scheduleSync();
             }
-            this.setSyncStatus('ok');
-            alert('✅ Datos de la nube descargados correctamente.');
+        }
+        this.refreshSyncTelemetry().catch(console.warn);
+    }
+
+    async gitFetch() {
+        if (!this.syncReady || !this.currentProfileId) {
+            alert('Conecta un perfil de Supabase para poder consultar el estado remoto.');
+            return;
+        }
+        try {
+            const count = await BftSync.fetchRecordCount(this.currentProfileId);
+            const totalLocal = (this.feedings?.length || 0) + (this.diapers?.length || 0) + (this.measurements?.length || 0) + (this.medicines?.length || 0) + (this.temperatures?.length || 0) + (this.appointments?.length || 0) + (this.journalEntries?.length || 0);
+            this.recordSyncTransaction();
+            alert(`☁️ Consulta remota (git fetch) completada:\n• Registros en este dispositivo: ${totalLocal}\n• Registros en la nube: ${count}`);
         } catch (e) {
-            console.error('Force pull error:', e);
-            this.setSyncStatus('error');
-            alert('❌ Error al descargar de la nube.');
+            console.error('gitFetch error:', e);
+            alert('❌ Error al consultar la nube: ' + e.message);
         }
     }
 
-    async manualMergeData() {
-        if (!this.syncReady || !this.currentProfileId) return;
+    async gitPush() {
+        if (!this.syncReady || !this.currentProfileId) {
+            alert('Conecta un perfil de Supabase antes de enviar cambios.');
+            return;
+        }
+        this.setSyncStatus('syncing');
+        try {
+            await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
+                feedings: this.feedings,
+                diapers: this.diapers,
+                measurements: this.measurements,
+                medicines: this.medicines,
+                temperatures: this.temperatures,
+                appointments: this.appointments,
+                journal: this.journalEntries
+            });
+            await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
+            this.pendingSyncRecords.clear();
+            this.pendingDeletes = [];
+            this.setSyncStatus('ok');
+            this.recordSyncTransaction();
+            alert('⬆️ Cambios locales enviados a la nube (git push) correctamente.');
+        } catch (e) {
+            console.error('gitPush error:', e);
+            this.setSyncStatus('error');
+            alert('❌ Error al enviar cambios a la nube.');
+        }
+    }
+
+    async gitPull() {
+        if (!this.syncReady || !this.currentProfileId) {
+            alert('Conecta un perfil de Supabase antes de bajar cambios.');
+            return;
+        }
         this.setSyncStatus('syncing');
         try {
             const remoteData = await BftSync.pullData(this.currentProfileId);
             if (remoteData) {
                 await this.mergeLocalAndRemoteData(remoteData);
+                const remoteSettings = await BftSync.pullSettings(this.currentProfileId, this.currentBabyId);
+                if (remoteSettings) this.applyRemoteSettings(remoteSettings);
             }
             this.setSyncStatus('ok');
-            alert('✅ Datos locales y remotos fusionados correctamente sin pérdidas.');
+            this.recordSyncTransaction();
+            alert('⬇️ Cambios de la nube descargados e integrados (git pull) correctamente.');
         } catch (e) {
-            console.error('Manual merge error:', e);
+            console.error('gitPull error:', e);
             this.setSyncStatus('error');
-            alert('❌ Error al fusionar datos.');
+            alert('❌ Error al bajar cambios de la nube.');
+        }
+    }
+
+    async gitAdminForcePush() {
+        if (!this.syncReady || !this.currentProfileId) {
+            alert('Conecta un perfil de Supabase antes de ejecutar el modo administrador.');
+            return;
+        }
+        if (!confirm('⚠️ MODO ADMINISTRADOR: ¿Deseas purgar por completo la nube y reconstruir el perfil remoto utilizando únicamente los datos de este dispositivo? Esta acción ignora los registros antiguos de Supabase y los reemplaza.')) {
+            return;
+        }
+        this.setSyncStatus('syncing');
+        try {
+            await BftSync.deleteAllRecords(this.currentProfileId);
+            await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
+                feedings: this.feedings,
+                diapers: this.diapers,
+                measurements: this.measurements,
+                medicines: this.medicines,
+                temperatures: this.temperatures,
+                appointments: this.appointments,
+                journal: this.journalEntries
+            });
+            await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
+            this.pendingSyncRecords.clear();
+            this.pendingDeletes = [];
+            this.setSyncStatus('ok');
+            this.recordSyncTransaction();
+            alert('👑 Modo Admin: Nube completamente purgada y reconstruida desde tus datos locales.');
+        } catch (e) {
+            console.error('gitAdminForcePush error:', e);
+            this.setSyncStatus('error');
+            alert('❌ Error en la reconstrucción admin.');
         }
     }
 
@@ -4399,6 +4482,9 @@ class FeedingTracker {
         const connectSection = document.getElementById('sync-connect-section');
         const connectedSection = document.getElementById('sync-connected-section');
         const profileIdEl = document.getElementById('sync-profile-id');
+        const toggleEl = document.getElementById('auto-sync-toggle');
+
+        if (toggleEl) toggleEl.checked = this.autoSyncEnabled;
 
         if (this.syncReady && this.currentProfileId) {
             if (connectSection) connectSection.classList.add('hidden');
