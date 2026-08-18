@@ -557,17 +557,22 @@ class FeedingTracker {
                         await this.renderTemperatureList();
                         await this.renderAppointmentList();
                         await this.renderJournalList();
-                        await this.updateDiaperTodaySummary();
-                        await this.updateStats('today');
-                        await this.updateGraphs('today');
                         this.renderTemperatureChart();
                         this.updateAgeDisplay();
+                        if (this.nextFeedingTimer) clearTimeout(this.nextFeedingTimer);
+                        if (this.nextFeedingCountdownInterval) clearInterval(this.nextFeedingCountdownInterval);
+                        this.updateNextFeedingDisplay(null);
+                        localStorage.removeItem('nextFeedingTime');
+                        this.recordLocalChange();
+
+                        if (this.syncReady && this.currentProfileId) {
+                            await BftSync.deleteAllRecords(this.currentProfileId);
+                            this.recordSyncTransaction();
+                        }
                         alert('Todos los datos han sido eliminados.');
-                        this.clearNextFeedingSchedule();
-                        if (this.syncReady) await BftSync.deleteAllRecords(this.currentProfileId);
                     } catch (error) {
                         console.error('Failed to clear data:', error);
-                        alert('Error al eliminar los datos.');
+                        alert('Error al eliminar los datos: ' + error.message);
                     }
                 }
             }
@@ -3298,7 +3303,10 @@ class FeedingTracker {
         const cloudGroup = document.getElementById('import-cloud-group');
         const confirmBtn = document.getElementById('confirm-import-strategy-btn');
 
-        if (!modal) return;
+        if (!modal) {
+            console.error('#import-strategy-modal element not found!');
+            return;
+        }
 
         if (summaryEl) summaryEl.textContent = summaryText;
 
@@ -3315,17 +3323,21 @@ class FeedingTracker {
 
         newConfirmBtn.addEventListener('click', () => {
             const localStrategy = document.getElementById('import-local-strategy').value;
-            const cloudStrategy = document.getElementById('import-cloud-strategy').value;
+            const cloudStrategy = cloudGroup && cloudGroup.style.display !== 'none' ? document.getElementById('import-cloud-strategy').value : 'local_only';
             this.closeImportStrategyModal();
             onConfirmCallback(localStrategy, cloudStrategy);
         });
 
         modal.classList.add('active');
+        modal.style.display = 'flex';
     }
 
     closeImportStrategyModal() {
         const modal = document.getElementById('import-strategy-modal');
-        if (modal) modal.classList.remove('active');
+        if (modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+        }
     }
 
     deduplicateRecordList(existingList, importedList, type) {
@@ -3420,6 +3432,8 @@ class FeedingTracker {
         this.populateComplementaryFoodSelect();
         this.applyDarkMode();
 
+        this.recordLocalChange();
+
         if (this.syncReady && this.currentProfileId) {
             if (cloudStrategy === 'overwrite_cloud') {
                 this.setSyncStatus('syncing');
@@ -3435,6 +3449,7 @@ class FeedingTracker {
                 });
                 await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
                 this.setSyncStatus('ok');
+                this.recordSyncTransaction();
             } else if (cloudStrategy === 'merge_cloud') {
                 this.setSyncStatus('syncing');
                 await BftSync.pushAllData(this.currentProfileId, this.currentBabyId, {
@@ -3448,6 +3463,7 @@ class FeedingTracker {
                 });
                 await BftSync.pushSettings(this.currentProfileId, this.currentBabyId, this.buildSettingsSnapshot());
                 this.setSyncStatus('ok');
+                this.recordSyncTransaction();
             }
         }
 
@@ -3461,15 +3477,40 @@ class FeedingTracker {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                const payload = JSON.parse(e.target.result);
+                let rawContent = e.target.result;
+                let payload = JSON.parse(rawContent);
 
-                const importedFeedings = Array.isArray(payload.feedings) ? payload.feedings : [];
-                const importedDiapers = Array.isArray(payload.diapers) ? payload.diapers : [];
-                const importedMeasurements = Array.isArray(payload.measurements) ? payload.measurements : [];
-                const importedMedicines = Array.isArray(payload.medicines) ? payload.medicines : [];
-                const importedTemperatures = Array.isArray(payload.temperatures) ? payload.temperatures : [];
-                const importedAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
-                const importedJournalEntries = Array.isArray(payload.journalEntries) || Array.isArray(payload.journal) ? (payload.journalEntries || payload.journal) : [];
+                if (payload && payload.data) payload = payload.data;
+
+                let importedFeedings = [];
+                let importedDiapers = [];
+                let importedMeasurements = [];
+                let importedMedicines = [];
+                let importedTemperatures = [];
+                let importedAppointments = [];
+                let importedJournalEntries = [];
+
+                if (Array.isArray(payload)) {
+                    payload.forEach(item => {
+                        if (!item) return;
+                        const type = item.type || item.record_type;
+                        if (type === 'feeding') importedFeedings.push(item);
+                        else if (type === 'diaper') importedDiapers.push(item);
+                        else if (type === 'measurement') importedMeasurements.push(item);
+                        else if (type === 'medicine') importedMedicines.push(item);
+                        else if (type === 'temperature') importedTemperatures.push(item);
+                        else if (type === 'appointment') importedAppointments.push(item);
+                        else if (type === 'journal') importedJournalEntries.push(item);
+                    });
+                } else if (payload && typeof payload === 'object') {
+                    importedFeedings = Array.isArray(payload.feedings) ? payload.feedings : [];
+                    importedDiapers = Array.isArray(payload.diapers) ? payload.diapers : [];
+                    importedMeasurements = Array.isArray(payload.measurements) ? payload.measurements : [];
+                    importedMedicines = Array.isArray(payload.medicines) ? payload.medicines : [];
+                    importedTemperatures = Array.isArray(payload.temperatures) ? payload.temperatures : [];
+                    importedAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
+                    importedJournalEntries = Array.isArray(payload.journalEntries) || Array.isArray(payload.journal) ? (payload.journalEntries || payload.journal) : [];
+                }
 
                 const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length + importedMedicines.length + importedTemperatures.length + importedAppointments.length + importedJournalEntries.length;
                 if (totalImported === 0) {
@@ -3477,14 +3518,25 @@ class FeedingTracker {
                     return;
                 }
 
+                const cleanPayload = {
+                    feedings: importedFeedings,
+                    diapers: importedDiapers,
+                    measurements: importedMeasurements,
+                    medicines: importedMedicines,
+                    temperatures: importedTemperatures,
+                    appointments: importedAppointments,
+                    journalEntries: importedJournalEntries,
+                    ...(typeof payload === 'object' && !Array.isArray(payload) ? payload : {})
+                };
+
                 this.openImportStrategyModal(
-                    `📦 Archivo JSON detectado con ${totalImported} registros.`,
+                    `📦 Archivo JSON detectado con ${totalImported.toLocaleString()} registros.`,
                     async (localStrategy, cloudStrategy) => {
-                        await this.processImportPayload(payload, localStrategy, cloudStrategy);
+                        await this.processImportPayload(cleanPayload, localStrategy, cloudStrategy);
                     }
                 );
             } catch (error) {
-                console.error(error);
+                console.error('importJSON error:', error);
                 alert('Error al importar JSON: ' + error.message);
             }
         };
