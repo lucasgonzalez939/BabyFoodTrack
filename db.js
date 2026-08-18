@@ -15,6 +15,26 @@ function generateRecordId() {
     return Date.now() * 1000 + Math.floor(Math.random() * 1000);
 }
 
+function normalizeRecordTime(record) {
+    if (!record) record = {};
+    let raw = record.time || record.timestamp || record.created_at || record.date;
+    let d = raw ? new Date(raw) : new Date();
+    if (isNaN(d.getTime())) {
+        d = new Date();
+    }
+    const timeIso = d.toISOString();
+    const timestampMs = d.getTime();
+    const dateStr = timeIso.split('T')[0];
+    const yearMonthStr = dateStr.substring(0, 7);
+
+    return {
+        timeIso,
+        timestampMs,
+        dateStr,
+        yearMonthStr
+    };
+}
+
 // Object store names
 const STORES = {
     FEEDINGS: 'feedings',
@@ -251,6 +271,36 @@ class BabyFoodDB {
         }
     }
 
+    async bulkPutRecords(storeName, recordsArray) {
+        await this.ensureInit();
+        if (!recordsArray || !Array.isArray(recordsArray) || recordsArray.length === 0) return;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+
+            for (const record of recordsArray) {
+                if (!record) continue;
+                const { timeIso, timestampMs, dateStr, yearMonthStr } = normalizeRecordTime(record);
+
+                const itemData = {
+                    id: record.id || generateRecordId(),
+                    ...record,
+                    time: record.time || timeIso,
+                    timestamp: timestampMs,
+                    date: dateStr,
+                    yearMonth: yearMonthStr,
+                    createdAt: record.createdAt || Date.now()
+                };
+                itemData.id = itemData.id || generateRecordId();
+                store.put(itemData);
+            }
+
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
     // ============= FEEDING OPERATIONS =============
 
     /**
@@ -261,20 +311,17 @@ class BabyFoodDB {
     async addFeeding(feeding) {
         await this.ensureInit();
 
-        // Add computed fields for indexing
-        const timestamp = new Date(feeding.time).getTime();
-        const date = new Date(feeding.time).toISOString().split('T')[0];
-        const yearMonth = date.substring(0, 7);
+        const { timeIso, timestampMs, dateStr, yearMonthStr } = normalizeRecordTime(feeding);
 
         const feedingData = {
             id: feeding.id || generateRecordId(),
             ...feeding,
-            timestamp,
-            date,
-            yearMonth,
+            time: feeding.time || timeIso,
+            timestamp: timestampMs,
+            date: dateStr,
+            yearMonth: yearMonthStr,
             createdAt: Date.now()
         };
-        // Ensure explicit id overrides any spread
         feedingData.id = feedingData.id || generateRecordId();
 
         return new Promise((resolve, reject) => {
@@ -443,17 +490,15 @@ class BabyFoodDB {
     async addDiaper(diaper) {
         await this.ensureInit();
 
-        // Add computed fields for indexing
-        const timestamp = new Date(diaper.time).getTime();
-        const date = new Date(diaper.time).toISOString().split('T')[0];
-        const yearMonth = date.substring(0, 7);
+        const { timeIso, timestampMs, dateStr, yearMonthStr } = normalizeRecordTime(diaper);
 
         const diaperData = {
             id: diaper.id || generateRecordId(),
             ...diaper,
-            timestamp,
-            date,
-            yearMonth,
+            time: diaper.time || timeIso,
+            timestamp: timestampMs,
+            date: dateStr,
+            yearMonth: yearMonthStr,
             createdAt: Date.now()
         };
         diaperData.id = diaperData.id || generateRecordId();
@@ -576,15 +621,14 @@ class BabyFoodDB {
     async addMeasurement(measurement) {
         await this.ensureInit();
 
-        // Add computed fields for indexing
-        const timestamp = new Date(measurement.time).getTime();
-        const date = new Date(measurement.time).toISOString().split('T')[0];
+        const { timeIso, timestampMs, dateStr } = normalizeRecordTime(measurement);
 
         const measurementData = {
             id: measurement.id || generateRecordId(),
             ...measurement,
-            timestamp,
-            date,
+            time: measurement.time || timeIso,
+            timestamp: timestampMs,
+            date: dateStr,
             createdAt: Date.now()
         };
         measurementData.id = measurementData.id || generateRecordId();
@@ -618,6 +662,29 @@ class BabyFoodDB {
                 resolve(results);
             };
             request.onerror = () => reject(request.error);
+        });
+    }
+
+    async updateMeasurement(id, updates) {
+        await this.ensureInit();
+        return new Promise(async (resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MEASUREMENTS], 'readwrite');
+            const store = transaction.objectStore(STORES.MEASUREMENTS);
+            const getRequest = store.get(id);
+
+            getRequest.onsuccess = () => {
+                const item = getRequest.result;
+                if (!item) {
+                    reject(new Error(`Measurement with id ${id} not found`));
+                    return;
+                }
+                const { timeIso, timestampMs, dateStr } = normalizeRecordTime({ ...item, ...updates });
+                const updated = { ...item, ...updates, time: updates.time || item.time || timeIso, timestamp: timestampMs, date: dateStr };
+                const putRequest = store.put(updated);
+                putRequest.onsuccess = () => resolve();
+                putRequest.onerror = () => reject(putRequest.error);
+            };
+            getRequest.onerror = () => reject(getRequest.error);
         });
     }
 
@@ -660,9 +727,8 @@ class BabyFoodDB {
 
     async addMedicine(medicine) {
         await this.ensureInit();
-        const timestamp = new Date(medicine.time).getTime();
-        const date = new Date(medicine.time).toISOString().split('T')[0];
-        const medicineData = { id: medicine.id || generateRecordId(), ...medicine, timestamp, date, createdAt: Date.now() };
+        const { timeIso, timestampMs, dateStr } = normalizeRecordTime(medicine);
+        const medicineData = { id: medicine.id || generateRecordId(), ...medicine, time: medicine.time || timeIso, timestamp: timestampMs, date: dateStr, createdAt: Date.now() };
         medicineData.id = medicineData.id || generateRecordId();
 
         return new Promise((resolve, reject) => {
@@ -702,7 +768,8 @@ class BabyFoodDB {
                     reject(new Error(`Medicine with id ${id} not found`));
                     return;
                 }
-                const updated = { ...medicine, ...updates };
+                const { timeIso, timestampMs, dateStr } = normalizeRecordTime({ ...medicine, ...updates });
+                const updated = { ...medicine, ...updates, time: updates.time || medicine.time || timeIso, timestamp: timestampMs, date: dateStr };
                 const putRequest = store.put(updated);
                 putRequest.onsuccess = () => resolve();
                 putRequest.onerror = () => reject(putRequest.error);
@@ -737,9 +804,8 @@ class BabyFoodDB {
 
     async addTemperature(temperature) {
         await this.ensureInit();
-        const timestamp = new Date(temperature.time).getTime();
-        const date = new Date(temperature.time).toISOString().split('T')[0];
-        const tempData = { id: temperature.id || generateRecordId(), ...temperature, timestamp, date, createdAt: Date.now() };
+        const { timeIso, timestampMs, dateStr } = normalizeRecordTime(temperature);
+        const tempData = { id: temperature.id || generateRecordId(), ...temperature, time: temperature.time || timeIso, timestamp: timestampMs, date: dateStr, createdAt: Date.now() };
         tempData.id = tempData.id || generateRecordId();
 
         return new Promise((resolve, reject) => {
@@ -792,9 +858,8 @@ class BabyFoodDB {
 
     async addAppointment(appointment) {
         await this.ensureInit();
-        const timestamp = new Date(appointment.time).getTime();
-        const date = new Date(appointment.time).toISOString().split('T')[0];
-        const apptData = { id: appointment.id || generateRecordId(), ...appointment, timestamp, date, createdAt: Date.now() };
+        const { timeIso, timestampMs, dateStr } = normalizeRecordTime(appointment);
+        const apptData = { id: appointment.id || generateRecordId(), ...appointment, time: appointment.time || timeIso, timestamp: timestampMs, date: dateStr, createdAt: Date.now() };
         apptData.id = apptData.id || generateRecordId();
 
         return new Promise((resolve, reject) => {
@@ -847,9 +912,8 @@ class BabyFoodDB {
 
     async addJournalEntry(entry) {
         await this.ensureInit();
-        const timestamp = new Date(entry.time).getTime();
-        const date = new Date(entry.time).toISOString().split('T')[0];
-        const entryData = { id: entry.id || generateRecordId(), ...entry, timestamp, date, createdAt: Date.now() };
+        const { timeIso, timestampMs, dateStr } = normalizeRecordTime(entry);
+        const entryData = { id: entry.id || generateRecordId(), ...entry, time: entry.time || timeIso, timestamp: timestampMs, date: dateStr, createdAt: Date.now() };
         entryData.id = entryData.id || generateRecordId();
 
         return new Promise((resolve, reject) => {

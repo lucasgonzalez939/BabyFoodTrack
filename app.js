@@ -3549,13 +3549,13 @@ class FeedingTracker {
 
         if (this.useIndexedDB) {
             await db.clearAllData();
-            for (const f of finalFeedings) await db.addFeeding(f);
-            for (const d of finalDiapers) await db.addDiaper(d);
-            for (const m of finalMeasurements) await db.addMeasurement(m);
-            for (const m of finalMedicines) await db.addMedicine(m);
-            for (const t of finalTemperatures) await db.addTemperature(t);
-            for (const a of finalAppointments) await db.addAppointment(a);
-            for (const j of finalJournal) await db.addJournalEntry(j);
+            await db.bulkPutRecords(STORES.FEEDINGS, finalFeedings);
+            await db.bulkPutRecords(STORES.DIAPERS, finalDiapers);
+            await db.bulkPutRecords(STORES.MEASUREMENTS, finalMeasurements);
+            await db.bulkPutRecords(STORES.MEDICINES, finalMedicines);
+            await db.bulkPutRecords(STORES.TEMPERATURES, finalTemperatures);
+            await db.bulkPutRecords(STORES.APPOINTMENTS, finalAppointments);
+            await db.bulkPutRecords(STORES.JOURNAL, finalJournal);
         }
 
         this.feedings = finalFeedings;
