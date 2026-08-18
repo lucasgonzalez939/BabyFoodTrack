@@ -3287,12 +3287,11 @@ class FeedingTracker {
             } catch (error) {
                 console.error(error);
                 alert('Error al importar CSV: ' + error.message);
+            } finally {
+                event.target.value = '';
             }
         };
         reader.readAsText(file);
-        
-        // Reset file input
-        event.target.value = '';
     }
 
     // ============= IMPORT CONCILIATION & STRATEGY MODAL =============
@@ -3538,11 +3537,12 @@ class FeedingTracker {
             } catch (error) {
                 console.error('importJSON error:', error);
                 alert('Error al importar JSON: ' + error.message);
+            } finally {
+                event.target.value = '';
             }
         };
 
         reader.readAsText(file);
-        event.target.value = '';
     }
 
     // Storage Management (supports both IndexedDB and localStorage)
