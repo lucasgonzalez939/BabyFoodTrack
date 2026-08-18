@@ -3302,8 +3302,9 @@ class FeedingTracker {
         const cloudGroup = document.getElementById('import-cloud-group');
         const confirmBtn = document.getElementById('confirm-import-strategy-btn');
 
-        if (!modal) {
-            console.error('#import-strategy-modal element not found!');
+        if (!modal || !confirmBtn || !confirmBtn.parentNode) {
+            console.warn('Import strategy modal is incomplete. Falling back to merge + local-only import.');
+            onConfirmCallback('merge', 'local_only');
             return;
         }
 
@@ -3324,7 +3325,10 @@ class FeedingTracker {
             const localStrategy = document.getElementById('import-local-strategy').value;
             const cloudStrategy = cloudGroup && cloudGroup.style.display !== 'none' ? document.getElementById('import-cloud-strategy').value : 'local_only';
             this.closeImportStrategyModal();
-            onConfirmCallback(localStrategy, cloudStrategy);
+            Promise.resolve(onConfirmCallback(localStrategy, cloudStrategy)).catch((error) => {
+                console.error('Import callback failed:', error);
+                alert('Error al procesar la importación: ' + error.message);
+            });
         });
 
         modal.classList.add('active');
@@ -3339,27 +3343,168 @@ class FeedingTracker {
         }
     }
 
+    getRecordTimeInfo(item, type, index) {
+        const rawTimestamp = item && (item.timestamp || item.time || item.date || item.created_at);
+        if (rawTimestamp) {
+            const date = new Date(rawTimestamp);
+            if (!Number.isNaN(date.getTime())) {
+                const iso = date.toISOString();
+                return {
+                    key: `${type}:${iso}`,
+                    normalizedTimestamp: iso
+                };
+            }
+        }
+
+        if (item && item.id !== undefined && item.id !== null && item.id !== '') {
+            return {
+                key: `${type}:id:${item.id}`,
+                normalizedTimestamp: null
+            };
+        }
+
+        return {
+            key: `${type}:idx:${index}`,
+            normalizedTimestamp: null
+        };
+    }
+
+    classifyImportedRecord(rawItem) {
+        if (!rawItem || typeof rawItem !== 'object') return { collection: null, item: null };
+
+        const nestedPayload = rawItem.payload || rawItem.data || rawItem.record || rawItem.entry;
+        const item = nestedPayload && typeof nestedPayload === 'object' ? nestedPayload : rawItem;
+
+        const rawType =
+            rawItem.record_type ||
+            rawItem.recordType ||
+            rawItem.collection ||
+            rawItem.table ||
+            rawItem.entity ||
+            rawItem.kind ||
+            rawItem.type ||
+            item.record_type ||
+            item.recordType ||
+            item.collection ||
+            item.table ||
+            item.entity ||
+            item.kind ||
+            item.type;
+
+        const type = typeof rawType === 'string' ? rawType.toLowerCase() : '';
+        if (['feeding', 'feedings', 'alimentacion', 'bottle', 'breast', 'complementary', 'water'].includes(type)) {
+            return { collection: 'feedings', item };
+        }
+        if (['diaper', 'diapers', 'panal', 'pañal'].includes(type)) {
+            return { collection: 'diapers', item };
+        }
+        if (['measurement', 'measurements', 'growth', 'crecimiento'].includes(type)) {
+            return { collection: 'measurements', item };
+        }
+        if (['medicine', 'medicines', 'medication', 'medicamento'].includes(type)) {
+            return { collection: 'medicines', item };
+        }
+        if (['temperature', 'temperatures', 'temp', 'temperatura'].includes(type)) {
+            return { collection: 'temperatures', item };
+        }
+        if (['appointment', 'appointments', 'cita', 'citas'].includes(type)) {
+            return { collection: 'appointments', item };
+        }
+        if (['journal', 'journals', 'journalentry', 'journalentries', 'diario'].includes(type)) {
+            return { collection: 'journalEntries', item };
+        }
+
+        if ('hasPee' in item || 'hasPoop' in item || 'level' in item) return { collection: 'diapers', item };
+        if ('weight' in item || 'height' in item) return { collection: 'measurements', item };
+        if ('value' in item && ('notes' in item || 'timezone' in item)) return { collection: 'temperatures', item };
+        if ('dose' in item || 'nextDose' in item || 'interval' in item) return { collection: 'medicines', item };
+        if ('completed' in item || 'location' in item) return { collection: 'appointments', item };
+        if ('category' in item || 'description' in item || 'tags' in item) return { collection: 'journalEntries', item };
+        if ('amount' in item || 'duration' in item || 'food' in item || ['bottle', 'breast', 'complementary', 'water'].includes(item.type)) {
+            return { collection: 'feedings', item };
+        }
+
+        return { collection: null, item: null };
+    }
+
+    extractImportCollections(payload) {
+        const extracted = {
+            feedings: [],
+            diapers: [],
+            measurements: [],
+            medicines: [],
+            temperatures: [],
+            appointments: [],
+            journalEntries: []
+        };
+
+        const addItems = (collection, items) => {
+            if (!collection || !Array.isArray(items)) return;
+            items.forEach((item) => {
+                if (item && typeof item === 'object') extracted[collection].push(item);
+            });
+        };
+
+        if (Array.isArray(payload)) {
+            payload.forEach((rawItem) => {
+                const { collection, item } = this.classifyImportedRecord(rawItem);
+                if (collection && item) extracted[collection].push(item);
+            });
+            return extracted;
+        }
+
+        if (!payload || typeof payload !== 'object') return extracted;
+
+        addItems('feedings', payload.feedings || payload.feeding || payload.alimentacion);
+        addItems('diapers', payload.diapers || payload.panales || payload.pañales);
+        addItems('measurements', payload.measurements || payload.growth || payload.crecimiento);
+        addItems('medicines', payload.medicines || payload.medications || payload.medicamentos);
+        addItems('temperatures', payload.temperatures || payload.temps || payload.temperature);
+        addItems('appointments', payload.appointments || payload.citas);
+        addItems('journalEntries', payload.journalEntries || payload.journal_entries || payload.journal || payload.diario);
+
+        const records =
+            (Array.isArray(payload.records) && payload.records) ||
+            (Array.isArray(payload.items) && payload.items) ||
+            (Array.isArray(payload.entries) && payload.entries) ||
+            (Array.isArray(payload.rows) && payload.rows) ||
+            [];
+
+        records.forEach((rawItem) => {
+            const { collection, item } = this.classifyImportedRecord(rawItem);
+            if (collection && item) extracted[collection].push(item);
+        });
+
+        return extracted;
+    }
+
     deduplicateRecordList(existingList, importedList, type) {
         const map = new Map();
 
-        (existingList || []).forEach(item => {
+        (existingList || []).forEach((item, index) => {
             if (!item) return;
-            const ts = item.timestamp || item.time;
-            const timeKey = ts ? new Date(ts).toISOString() : `id:${item.id}`;
-            const key = `${type}:${timeKey}`;
-            map.set(key, item);
+            const timeInfo = this.getRecordTimeInfo(item, type, index);
+            map.set(timeInfo.key, item);
         });
 
-        (importedList || []).forEach(item => {
+        (importedList || []).forEach((item, index) => {
             if (!item) return;
-            const ts = item.timestamp || item.time;
-            const timeKey = ts ? new Date(ts).toISOString() : `id:${item.id}`;
-            const key = `${type}:${timeKey}`;
-            if (map.has(key)) {
-                const existing = map.get(key);
-                map.set(key, { ...existing, ...item, id: existing.id, timestamp: timeKey, time: timeKey });
+            const timeInfo = this.getRecordTimeInfo(item, type, index);
+            if (map.has(timeInfo.key)) {
+                const existing = map.get(timeInfo.key);
+                const merged = { ...existing, ...item, id: existing.id };
+                if (timeInfo.normalizedTimestamp) {
+                    merged.timestamp = timeInfo.normalizedTimestamp;
+                    merged.time = timeInfo.normalizedTimestamp;
+                }
+                map.set(timeInfo.key, merged);
             } else {
-                map.set(key, { ...item, timestamp: timeKey, time: timeKey });
+                const inserted = { ...item };
+                if (timeInfo.normalizedTimestamp) {
+                    inserted.timestamp = timeInfo.normalizedTimestamp;
+                    inserted.time = timeInfo.normalizedTimestamp;
+                }
+                map.set(timeInfo.key, inserted);
             }
         });
 
@@ -3476,43 +3621,28 @@ class FeedingTracker {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                let rawContent = e.target.result;
+                let rawContent = typeof e.target.result === 'string' ? e.target.result : '';
+                rawContent = rawContent.replace(/^\uFEFF/, '').trim();
+                if (!rawContent) {
+                    throw new Error('El archivo está vacío');
+                }
+
                 let payload = JSON.parse(rawContent);
 
                 if (payload && payload.data) payload = payload.data;
 
-                let importedFeedings = [];
-                let importedDiapers = [];
-                let importedMeasurements = [];
-                let importedMedicines = [];
-                let importedTemperatures = [];
-                let importedAppointments = [];
-                let importedJournalEntries = [];
-
-                if (Array.isArray(payload)) {
-                    payload.forEach(item => {
-                        if (!item) return;
-                        const type = item.type || item.record_type;
-                        if (type === 'feeding') importedFeedings.push(item);
-                        else if (type === 'diaper') importedDiapers.push(item);
-                        else if (type === 'measurement') importedMeasurements.push(item);
-                        else if (type === 'medicine') importedMedicines.push(item);
-                        else if (type === 'temperature') importedTemperatures.push(item);
-                        else if (type === 'appointment') importedAppointments.push(item);
-                        else if (type === 'journal') importedJournalEntries.push(item);
-                    });
-                } else if (payload && typeof payload === 'object') {
-                    importedFeedings = Array.isArray(payload.feedings) ? payload.feedings : [];
-                    importedDiapers = Array.isArray(payload.diapers) ? payload.diapers : [];
-                    importedMeasurements = Array.isArray(payload.measurements) ? payload.measurements : [];
-                    importedMedicines = Array.isArray(payload.medicines) ? payload.medicines : [];
-                    importedTemperatures = Array.isArray(payload.temperatures) ? payload.temperatures : [];
-                    importedAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
-                    importedJournalEntries = Array.isArray(payload.journalEntries) || Array.isArray(payload.journal) ? (payload.journalEntries || payload.journal) : [];
-                }
+                const collections = this.extractImportCollections(payload);
+                const importedFeedings = collections.feedings;
+                const importedDiapers = collections.diapers;
+                const importedMeasurements = collections.measurements;
+                const importedMedicines = collections.medicines;
+                const importedTemperatures = collections.temperatures;
+                const importedAppointments = collections.appointments;
+                const importedJournalEntries = collections.journalEntries;
 
                 const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length + importedMedicines.length + importedTemperatures.length + importedAppointments.length + importedJournalEntries.length;
                 if (totalImported === 0) {
+                    console.warn('JSON import: no recognized records found. Top-level keys:', payload && typeof payload === 'object' ? Object.keys(payload) : []);
                     alert('No se encontraron datos válidos en el archivo JSON');
                     return;
                 }
