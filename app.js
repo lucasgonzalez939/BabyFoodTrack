@@ -2972,37 +2972,97 @@ class FeedingTracker {
         return labels[reaction] || reaction;
     }
 
-    exportJSON() {
-        const payload = {
-            exportedAt: new Date().toISOString(),
-            timezone: this.timezone,
-            darkMode: this.darkMode,
-            defaultInterval: this.defaultInterval,
-            dailyMilkTarget: this.dailyMilkTarget,
-            dailySolidTarget: this.dailySolidTarget,
-            defaultSolidInterval: this.defaultSolidInterval,
-            dailyWaterTarget: this.dailyWaterTarget,
-            birthDate: this.birthDate,
-            notificationsEnabled: this.notificationsEnabled,
-            complementaryCatalog: this.complementaryCatalog,
-            feedings: this.feedings,
-            diapers: this.diapers,
-            measurements: this.measurements,
-            medicines: this.medicines,
-            temperatures: this.temperatures,
-            appointments: this.appointments,
-            journalEntries: this.journalEntries
+    // ============= UI FEEDBACK & TOAST SYSTEM =============
+
+    showToast(message, type = 'info', duration = 4000) {
+        const container = document.getElementById('bft-toast-container');
+        if (!container) return null;
+
+        const toast = document.createElement('div');
+        toast.className = `bft-toast toast-${type}`;
+
+        const icons = {
+            info: 'ℹ️',
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            loading: '⏳'
         };
 
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `babyfoodtrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        toast.innerHTML = `
+            <span style="font-size: 1.1rem; line-height: 1;">${icons[type] || 'ℹ️'}</span>
+            <div style="flex: 1;">${message}</div>
+        `;
+
+        container.appendChild(toast);
+
+        if (type !== 'loading' && duration > 0) {
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-10px)';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        return toast;
+    }
+
+    showImportErrorModal(summary, technicalDetail) {
+        const modal = document.getElementById('import-error-modal');
+        const summaryEl = document.getElementById('import-error-summary');
+        const detailEl = document.getElementById('import-error-detail');
+
+        if (summaryEl) summaryEl.textContent = summary;
+        if (detailEl) detailEl.textContent = technicalDetail || 'No hay detalle técnico disponible.';
+
+        if (modal) {
+            modal.classList.add('active');
+            modal.style.display = 'flex';
+        }
+    }
+
+    exportJSON() {
+        try {
+            const totalRecords = (this.feedings?.length || 0) + (this.diapers?.length || 0) + (this.measurements?.length || 0) + (this.medicines?.length || 0) + (this.temperatures?.length || 0) + (this.appointments?.length || 0) + (this.journalEntries?.length || 0);
+
+            const payload = {
+                exportedAt: new Date().toISOString(),
+                timezone: this.timezone,
+                darkMode: this.darkMode,
+                defaultInterval: this.defaultInterval,
+                dailyMilkTarget: this.dailyMilkTarget,
+                dailySolidTarget: this.dailySolidTarget,
+                defaultSolidInterval: this.defaultSolidInterval,
+                dailyWaterTarget: this.dailyWaterTarget,
+                birthDate: this.birthDate,
+                notificationsEnabled: this.notificationsEnabled,
+                complementaryCatalog: this.complementaryCatalog,
+                feedings: this.feedings,
+                diapers: this.diapers,
+                measurements: this.measurements,
+                medicines: this.medicines,
+                temperatures: this.temperatures,
+                appointments: this.appointments,
+                journalEntries: this.journalEntries
+            };
+
+            const jsonStr = JSON.stringify(payload, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const sizeKB = (blob.size / 1024).toFixed(1);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `babyfoodtrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            this.showToast(`✅ Respaldo JSON descargado (${totalRecords.toLocaleString()} registros, ${sizeKB} KB)`, 'success');
+        } catch (e) {
+            console.error('Export JSON error:', e);
+            this.showToast(`❌ Error al exportar JSON: ${e.message}`, 'error');
+        }
     }
 
     exportCSV() {
@@ -3611,23 +3671,32 @@ class FeedingTracker {
             }
         }
 
-        alert('✅ Importación completada con éxito.');
+        const totalProcessed = finalFeedings.length + finalDiapers.length + finalMeasurements.length + finalMedicines.length + finalTemperatures.length + finalAppointments.length + finalJournal.length;
+        this.showToast(`✅ Importación exitosa: ${totalProcessed.toLocaleString()} registros (${finalFeedings.length} tomas, ${finalDiapers.length} pañales, ${finalMeasurements.length} mediciones...)`, 'success', 6000);
     }
 
     importJSON(event) {
         const file = event.target.files[0];
         if (!file) return;
 
+        const loadingToast = this.showToast(`⏳ Leyendo archivo ${file.name}...`, 'loading');
+
         const reader = new FileReader();
         reader.onload = async (e) => {
+            if (loadingToast) loadingToast.remove();
             try {
                 let rawContent = typeof e.target.result === 'string' ? e.target.result : '';
                 rawContent = rawContent.replace(/^\uFEFF/, '').trim();
                 if (!rawContent) {
-                    throw new Error('El archivo está vacío');
+                    throw new Error('El archivo seleccionado está completamente vacío (0 bytes).');
                 }
 
-                let payload = JSON.parse(rawContent);
+                let payload;
+                try {
+                    payload = JSON.parse(rawContent);
+                } catch (parseErr) {
+                    throw new Error(`Sintaxis JSON inválida o corrupta: ${parseErr.message}`);
+                }
 
                 if (payload && payload.data) payload = payload.data;
 
@@ -3642,8 +3711,12 @@ class FeedingTracker {
 
                 const totalImported = importedFeedings.length + importedDiapers.length + importedMeasurements.length + importedMedicines.length + importedTemperatures.length + importedAppointments.length + importedJournalEntries.length;
                 if (totalImported === 0) {
-                    console.warn('JSON import: no recognized records found. Top-level keys:', payload && typeof payload === 'object' ? Object.keys(payload) : []);
-                    alert('No se encontraron datos válidos en el archivo JSON');
+                    const keysFound = payload && typeof payload === 'object' && !Array.isArray(payload) ? Object.keys(payload).join(', ') : 'arreglo sin coincidencias';
+                    console.warn('JSON import: no recognized records found. Keys:', keysFound);
+                    this.showImportErrorModal(
+                        'No se encontraron datos reconocibles en el archivo JSON.',
+                        `Contenido analizado: [${keysFound}]. Asegúrate de seleccionar un respaldo exportado por BabyFoodTrack.`
+                    );
                     return;
                 }
 
@@ -3659,17 +3732,28 @@ class FeedingTracker {
                 };
 
                 this.openImportStrategyModal(
-                    `📦 Archivo JSON detectado con ${totalImported.toLocaleString()} registros.`,
+                    `📦 Archivo JSON detectado: ${totalImported.toLocaleString()} registros (${file.name}).`,
                     async (localStrategy, cloudStrategy) => {
-                        await this.processImportPayload(cleanPayload, localStrategy, cloudStrategy);
+                        try {
+                            await this.processImportPayload(cleanPayload, localStrategy, cloudStrategy);
+                        } catch (err) {
+                            console.error('processImportPayload error:', err);
+                            this.showImportErrorModal('Falla al guardar registros en el almacenamiento local o nube.', err.message);
+                        }
                     }
                 );
             } catch (error) {
                 console.error('importJSON error:', error);
-                alert('Error al importar JSON: ' + error.message);
+                this.showImportErrorModal('Error al interpretar el archivo JSON.', error.message);
             } finally {
                 event.target.value = '';
             }
+        };
+
+        reader.onerror = (err) => {
+            if (loadingToast) loadingToast.remove();
+            this.showImportErrorModal('Error de lectura del sistema de archivos.', reader.error ? reader.error.message : 'No se pudo leer el archivo seleccionado.');
+            event.target.value = '';
         };
 
         reader.readAsText(file);

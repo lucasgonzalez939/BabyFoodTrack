@@ -460,14 +460,11 @@
                     <div class="setting-actions">
                         <button id="export-csv" class="btn btn-secondary">Exportar CSV</button>
                         <button id="export-json" class="btn btn-secondary">Exportar JSON</button>
-                        <label for="import-csv" class="btn btn-secondary">
-                            Importar CSV
-                            <input type="file" id="import-csv" accept=".csv" style="display: none;">
-                        </label>
-                        <label for="import-json" class="btn btn-secondary">
-                            Importar JSON
-                            <input type="file" id="import-json" accept=".json,application/json" style="display: none;">
-                        </label>
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('import-csv').click()">Importar CSV</button>
+                        <input type="file" id="import-csv" accept=".csv,text/csv,text/plain,*/*" style="display: none;" onchange="window.tracker && window.tracker.importCSV(event)">
+                        
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('import-json').click()">Importar JSON</button>
+                        <input type="file" id="import-json" accept=".json,application/json,text/plain,*/*" style="display: none;" onchange="window.tracker && window.tracker.importJSON(event)">
                     </div>
                     <p class="setting-description">Exporta o importa tus registros en CSV o en respaldo JSON completo.</p>
                 </div>
@@ -1008,6 +1005,41 @@
                 <div class="modal-actions" style="margin-top: 1.5rem;">
                     <button type="button" class="btn btn-secondary" onclick="window.tracker && window.tracker.closeImportStrategyModal()">Cancelar</button>
                     <button type="button" class="btn btn-primary" id="confirm-import-strategy-btn">Confirmar e Importar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="bft-toast-container" class="bft-toast-container"></div>
+
+    <!-- Import / Export Feedback Error Modal -->
+    <div id="import-error-modal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(225, 29, 72, 0.2);">
+                <h2 style="color: var(--danger-color); display: flex; align-items: center; gap: 8px;">
+                    ⚠️ Error de Importación
+                </h2>
+                <button class="modal-close" onclick="document.getElementById('import-error-modal').classList.remove('active')">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.25rem;">
+                <p id="import-error-summary" style="font-weight: 600; margin-bottom: 0.75rem; color: var(--text-color);">
+                    Ocurrió un error al intentar procesar el archivo.
+                </p>
+                
+                <div style="background: rgba(225, 29, 72, 0.06); padding: 12px; border-radius: 8px; border: 1px solid rgba(225, 29, 72, 0.15); margin-bottom: 1rem;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--danger-color); text-transform: uppercase; margin-bottom: 4px;">Detalle Técnico del Error:</div>
+                    <code id="import-error-detail" style="font-family: monospace; font-size: 0.82rem; color: var(--text-color); word-break: break-word; white-space: pre-wrap;">—</code>
+                </div>
+
+                <div style="font-size: 0.82rem; opacity: 0.85; line-height: 1.4;">
+                    💡 <strong>Sugerencia de solución:</strong><br>
+                    • Asegúrate de que el archivo seleccionado sea un JSON o CSV válido generado por BabyFoodTrack.<br>
+                    • Revisa que el archivo no esté incompleto o truncado.
+                </div>
+
+                <div class="modal-actions" style="margin-top: 1.25rem;">
+                    <button type="button" class="btn btn-primary" onclick="document.getElementById('import-error-modal').classList.remove('active')">Entendido</button>
                 </div>
             </div>
         </div>
